@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  icon      String
+  sortOrder Int       @default(0)
+  products  Product[]
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  description String
+  price       Float
+  image       String
+  isVeg       Boolean     @default(true)
+  badge       String?
+  categoryId  String
+  category    Category    @relation(fields: [categoryId], references: [id])
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now())
+}
+
+model Banner {
+  id          String   @id @default(cuid())
+  title       String
+  subtitle    String?
+  tag         String?
+  badge       String?
+  imageUrl    String
+  active      Boolean  @default(true)
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  customerName    String
+  customerPhone   String
+  deliveryAddress String
+  deliveryType    String      @default("Delivery") // "Delivery" | "Dine-in"
+  totalAmount     Float
+  status          String      @default("Pending")  // "Pending" | "Preparing" | "Dispatched" | "Delivered" | "Cancelled"
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  items           OrderItem[]
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  name      String
+  size      String   @default("Regular") // "Regular" | "Medium" | "Large"
+  crust     String   @default("Classic Hand Tossed")
+  quantity  Int      @default(1)
+  price     Float
+}
