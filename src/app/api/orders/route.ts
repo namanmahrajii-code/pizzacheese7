@@ -88,6 +88,7 @@ export async function POST(req: Request) {
       deliveryType,
       orderType,
       tableNumber,
+      paymentMethod,
       totalAmount,
       items,
       coordinates,
@@ -95,6 +96,8 @@ export async function POST(req: Request) {
 
     const resolvedOrderType: 'Delivery' | 'Dine-in' =
       orderType === 'Dine-in' || deliveryType === 'Dine-in' ? 'Dine-in' : 'Delivery';
+
+    const resolvedPaymentMethod: 'COD' | 'UPI' = paymentMethod === 'UPI' ? 'UPI' : 'COD';
 
     const newOrderId = `ORD-${Math.floor(10000 + Math.random() * 90000)}`;
 
@@ -109,6 +112,7 @@ export async function POST(req: Request) {
       deliveryType: resolvedOrderType,
       orderType: resolvedOrderType,
       tableNumber: resolvedOrderType === 'Dine-in' ? (tableNumber || null) : null,
+      paymentMethod: resolvedPaymentMethod,
       totalAmount: Number(totalAmount) || 0,
       status: 'Pending',
       coordinates: resolvedOrderType === 'Delivery' && coordinates && typeof coordinates.lat === 'number' && typeof coordinates.lng === 'number'

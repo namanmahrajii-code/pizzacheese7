@@ -9,3 +9,9 @@ export const STORE_LOCATION = {
   landmark: 'Near TVS Showroom',
   phone: '+91 98765 43210',
 };
+
+export const DEFAULT_PAYMENT_SETTINGS = {
+  upiId: '7cheesepizza@okhdfcbank',
+  upiQrUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi%3A%2F%2Fpay%3Fpa%3D7cheesepizza%40okhdfcbank%26pn%3D7Cheese%2520Pizza%26cu%3DINR',
+  restaurantName: '7Cheese Pizza Haldwani',
+};

@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
+  Menu as MenuIcon,
+  X,
   ChefHat,
   Bike,
   CheckCircle2,
@@ -30,11 +32,20 @@ import {
   Percent,
   Layers,
   ArrowUpRight,
-  X,
   Package,
   CheckCheck,
+  CreditCard,
+  QrCode,
+  UserCheck,
+  Key,
+  Lock,
+  Save,
+  ShieldCheck,
+  Copy,
+  Settings,
+  HelpCircle,
 } from 'lucide-react';
-import { STORE_LOCATION } from '@/lib/constants';
+import { STORE_LOCATION, DEFAULT_PAYMENT_SETTINGS } from '@/lib/constants';
 import { ProductItem, CategoryItem } from '@/lib/data';
 
 interface OrderItemData {
@@ -54,6 +65,7 @@ interface OrderData {
   deliveryType: string;
   orderType?: 'Delivery' | 'Dine-in';
   tableNumber?: string | null;
+  paymentMethod?: 'COD' | 'UPI';
   totalAmount: number;
   status: 'Pending' | 'Preparing' | 'Dispatched' | 'Delivered' | 'Cancelled';
   createdAt: string;
@@ -71,11 +83,17 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Primary High-Contrast POS Navigation Tabs:
-  // 'dine-in' | 'delivery' | 'menu' | 'analytics'
-  const [primaryTab, setPrimaryTab] = useState<'dine-in' | 'delivery' | 'menu' | 'analytics'>('dine-in');
+  // Sidebar Drawer state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Secondary Sub-Filter for Orders
+  // Main Active Sidebar View:
+  // 'orders' | 'menu' | 'analytics' | 'payment-settings' | 'profile'
+  const [activeSidebarTab, setActiveSidebarTab] = useState<
+    'orders' | 'menu' | 'analytics' | 'payment-settings' | 'profile'
+  >('orders');
+
+  // In Orders View: Order Stream selection ('dine-in' vs 'delivery')
+  const [ordersStream, setOrdersStream] = useState<'dine-in' | 'delivery'>('dine-in');
   const [orderSubFilter, setOrderSubFilter] = useState<'All' | 'Pending' | 'Preparing' | 'Dispatched' | 'Delivered'>('All');
 
   // Orders State
@@ -92,6 +110,26 @@ export default function AdminPage() {
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
 
+  // Payment Settings State
+  const [paymentSettings, setPaymentSettings] = useState({
+    upiId: DEFAULT_PAYMENT_SETTINGS.upiId,
+    upiQrUrl: DEFAULT_PAYMENT_SETTINGS.upiQrUrl,
+    restaurantName: DEFAULT_PAYMENT_SETTINGS.restaurantName,
+  });
+  const [isSavingPayment, setIsSavingPayment] = useState(false);
+  const [paymentSaveMessage, setPaymentSaveMessage] = useState('');
+
+  // Profile Credentials State
+  const [profileData, setProfileData] = useState({
+    username: '7cheese_admin',
+    email: 'admin@7cheesepizza.com',
+  });
+  const [currentPasswordInput, setCurrentPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   // Check saved session
   useEffect(() => {
     const session = localStorage.getItem('7cheese_admin_auth');
@@ -99,6 +137,8 @@ export default function AdminPage() {
       setIsAuthenticated(true);
       fetchOrders();
       fetchMenu();
+      fetchPaymentSettings();
+      fetchProfileData();
     }
   }, []);
 
@@ -107,9 +147,7 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/admin/orders');
       const data = await res.json();
-      if (data.orders) {
-        setOrders(data.orders);
-      }
+      if (data.orders) setOrders(data.orders);
     } catch (e) {
       console.error('Failed to fetch orders:', e);
     } finally {
@@ -128,6 +166,31 @@ export default function AdminPage() {
       console.error('Failed to fetch menu:', e);
     } finally {
       setIsLoadingMenu(false);
+    }
+  };
+
+  const fetchPaymentSettings = async () => {
+    try {
+      const res = await fetch('/api/admin/settings');
+      const data = await res.json();
+      if (data.settings) setPaymentSettings(data.settings);
+    } catch (e) {
+      console.error('Failed to fetch payment settings:', e);
+    }
+  };
+
+  const fetchProfileData = async () => {
+    try {
+      const res = await fetch('/api/admin/auth/update');
+      const data = await res.json();
+      if (data.username) {
+        setProfileData({
+          username: data.username,
+          email: data.email || 'admin@7cheesepizza.com',
+        });
+      }
+    } catch (e) {
+      console.error('Failed to fetch profile data:', e);
     }
   };
 
@@ -156,6 +219,8 @@ export default function AdminPage() {
         localStorage.setItem('7cheese_admin_auth', 'true');
         fetchOrders();
         fetchMenu();
+        fetchPaymentSettings();
+        fetchProfileData();
       } else {
         setLoginError(data.error || 'Invalid credentials');
       }
@@ -238,6 +303,78 @@ export default function AdminPage() {
     }
   };
 
+  // Save Payment Settings
+  const handleSavePaymentSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingPayment(true);
+    setPaymentSaveMessage('');
+
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(paymentSettings),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPaymentSaveMessage('✓ UPI Payment settings updated and live for customer UI!');
+        setTimeout(() => setPaymentSaveMessage(''), 4000);
+      } else {
+        setPaymentSaveMessage('Failed to save settings. Please retry.');
+      }
+    } catch (err) {
+      setPaymentSaveMessage('Network error saving payment settings.');
+    } finally {
+      setIsSavingPayment(false);
+    }
+  };
+
+  // Save Profile Credentials & Password
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileMessage(null);
+
+    if (newPasswordInput && newPasswordInput !== confirmPasswordInput) {
+      setProfileMessage({ type: 'error', text: 'New passwords do not match.' });
+      return;
+    }
+
+    if (!currentPasswordInput) {
+      setProfileMessage({ type: 'error', text: 'Please enter your Current Password to save changes.' });
+      return;
+    }
+
+    setIsSavingProfile(true);
+
+    try {
+      const res = await fetch('/api/admin/auth/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: currentPasswordInput,
+          newUsername: profileData.username,
+          newEmail: profileData.email,
+          newPassword: newPasswordInput || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setProfileMessage({ type: 'success', text: '✓ Admin credentials updated successfully!' });
+        setCurrentPasswordInput('');
+        setNewPasswordInput('');
+        setConfirmPasswordInput('');
+      } else {
+        setProfileMessage({ type: 'error', text: data.error || 'Failed to update credentials.' });
+      }
+    } catch (err) {
+      setProfileMessage({ type: 'error', text: 'Network error updating credentials.' });
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   // Generate Smart WhatsApp Dispatch Message
   const generateRiderWhatsAppUrl = (order: OrderData) => {
     const itemsText = (order.items || [])
@@ -261,8 +398,8 @@ export default function AdminPage() {
 *Order ID:* #${order.id}
 *Customer:* ${order.customerName}
 *Phone:* ${order.customerPhone}
+*Payment:* ${order.paymentMethod === 'UPI' ? '✅ Paid via UPI' : '💵 Cash on Delivery (Collect ₹' + order.totalAmount + ')'}
 *Order Mode:* ${order.deliveryType || 'Delivery'}
-*Cash/Total to Collect:* ₹${order.totalAmount}
 
 *📦 ORDER ITEMS:*
 ${itemsText}
@@ -273,7 +410,7 @@ ${order.deliveryAddress}
 *🗺️ GPS NAVIGATION LINK:*
 ${mapsUrl}
 ━━━━━━━━━━━━━━━━━━━
-_Please ensure hot & cheesy delivery!_`;
+_Please deliver hot & cheesy!_`;
 
     return `https://wa.me/?text=${encodeURIComponent(message)}`;
   };
@@ -326,12 +463,6 @@ _Please ensure hot & cheesy delivery!_`;
       .filter((o) => o.status !== 'Cancelled')
       .reduce((sum, o) => sum + o.totalAmount, 0);
 
-    const completedOrders = orders.filter((o) => o.status === 'Delivered').length;
-    const pendingOrders = orders.filter((o) => o.status === 'Pending').length;
-    const preparingOrders = orders.filter((o) => o.status === 'Preparing').length;
-    const dispatchedOrders = orders.filter((o) => o.status === 'Dispatched').length;
-
-    // Dine-in vs Delivery breakdown
     const allDineInOrders = orders.filter(
       (o) => o.deliveryType === 'Dine-in' || o.orderType === 'Dine-in'
     );
@@ -339,8 +470,12 @@ _Please ensure hot & cheesy delivery!_`;
       (o) => o.deliveryType !== 'Dine-in' && o.orderType !== 'Dine-in'
     );
 
-    const activeDineInCount = allDineInOrders.filter((o) => o.status !== 'Delivered' && o.status !== 'Cancelled').length;
-    const activeDeliveryCount = allDeliveryOrders.filter((o) => o.status !== 'Delivered' && o.status !== 'Cancelled').length;
+    const activeDineInCount = allDineInOrders.filter(
+      (o) => o.status !== 'Delivered' && o.status !== 'Cancelled'
+    ).length;
+    const activeDeliveryCount = allDeliveryOrders.filter(
+      (o) => o.status !== 'Delivered' && o.status !== 'Cancelled'
+    ).length;
 
     const aov = orders.length > 0 ? Math.round(totalRevenue / Math.max(1, orders.length)) : 0;
 
@@ -378,7 +513,8 @@ _Please ensure hot & cheesy delivery!_`;
         );
       });
 
-      const dayRevenue = matchingOrders.reduce((sum, o) => sum + o.totalAmount, 0) || Math.floor(800 + i * 420);
+      const dayRevenue =
+        matchingOrders.reduce((sum, o) => sum + o.totalAmount, 0) || Math.floor(800 + i * 420);
 
       return {
         day: dayName,
@@ -390,10 +526,6 @@ _Please ensure hot & cheesy delivery!_`;
 
     return {
       totalRevenue,
-      completedOrders,
-      pendingOrders,
-      preparingOrders,
-      dispatchedOrders,
       deliveryOrdersCount: allDeliveryOrders.length,
       dineInOrdersCount: allDineInOrders.length,
       activeDineInCount,
@@ -406,26 +538,17 @@ _Please ensure hot & cheesy delivery!_`;
     };
   }, [orders]);
 
-  // Filtered Orders strictly based on Primary Tab & Secondary Sub-Filter
+  // Filtered Orders strictly based on OrdersStream & Secondary Sub-Filter
   const displayedOrders = useMemo(() => {
-    let baseList = orders;
-
-    if (primaryTab === 'dine-in') {
-      baseList = analyticsData.allDineInOrders;
-    } else if (primaryTab === 'delivery') {
-      baseList = analyticsData.allDeliveryOrders;
-    }
-
+    let baseList = ordersStream === 'dine-in' ? analyticsData.allDineInOrders : analyticsData.allDeliveryOrders;
     if (orderSubFilter === 'All') return baseList;
     return baseList.filter((o) => o.status === orderSubFilter);
-  }, [orders, primaryTab, orderSubFilter, analyticsData]);
+  }, [ordersStream, orderSubFilter, analyticsData]);
 
   // Counts for Sub-filter chips
   const subFilterCounts = useMemo(() => {
     const targetPool =
-      primaryTab === 'dine-in'
-        ? analyticsData.allDineInOrders
-        : analyticsData.allDeliveryOrders;
+      ordersStream === 'dine-in' ? analyticsData.allDineInOrders : analyticsData.allDeliveryOrders;
 
     return {
       All: targetPool.length,
@@ -434,7 +557,7 @@ _Please ensure hot & cheesy delivery!_`;
       Dispatched: targetPool.filter((o) => o.status === 'Dispatched').length,
       Delivered: targetPool.filter((o) => o.status === 'Delivered').length,
     };
-  }, [primaryTab, analyticsData]);
+  }, [ordersStream, analyticsData]);
 
   // Filtered Menu Items
   const filteredProducts = useMemo(() => {
@@ -461,11 +584,11 @@ _Please ensure hot & cheesy delivery!_`;
             <div className="w-16 h-16 bg-[#e31837] rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-red-900/40 text-3xl">
               🧀
             </div>
-            <h2 className="text-xl font-black text-white tracking-tight">7Cheese POS Dashboard</h2>
-            <p className="text-xs text-slate-400 mt-1">High-Speed Restaurant Kitchen Management</p>
+            <h2 className="text-xl font-black text-white tracking-tight">7Cheese POS Terminal</h2>
+            <p className="text-xs text-slate-400 mt-1">Kitchen & Restaurant Management</p>
             <div className="inline-flex items-center space-x-1.5 bg-slate-800/80 border border-slate-700/60 px-3 py-1 rounded-full text-[11px] text-slate-300 mt-2">
               <MapPin className="w-3 h-3 text-red-400" />
-              <span>Haldwani Main Outlet (263139)</span>
+              <span>Haldwani Outlet (263139)</span>
             </div>
           </div>
 
@@ -510,7 +633,7 @@ _Please ensure hot & cheesy delivery!_`;
               disabled={isLoggingIn}
               className="w-full bg-[#e31837] hover:bg-[#c4122d] text-white font-black text-sm py-3.5 rounded-xl shadow-lg shadow-red-900/40 transition-all flex items-center justify-center space-x-2 disabled:opacity-50 mt-2 cursor-pointer"
             >
-              <span>{isLoggingIn ? 'Authenticating...' : 'ACCESS POS PORTAL'}</span>
+              <span>{isLoggingIn ? 'Authenticating...' : 'ACCESS POS DASHBOARD'}</span>
               <Check className="w-4 h-4" />
             </button>
           </form>
@@ -519,23 +642,164 @@ _Please ensure hot & cheesy delivery!_`;
     );
   }
 
-  // Authenticated High-Contrast POS Layout
+  // Sidebar Menu Config
+  const sidebarNavItems = [
+    {
+      id: 'orders' as const,
+      label: 'Live Orders',
+      icon: ShoppingBag,
+      badge: analyticsData.activeDineInCount + analyticsData.activeDeliveryCount,
+    },
+    {
+      id: 'menu' as const,
+      label: 'Menu Management',
+      icon: Package,
+    },
+    {
+      id: 'analytics' as const,
+      label: 'Sales Analytics',
+      icon: BarChart3,
+    },
+    {
+      id: 'payment-settings' as const,
+      label: 'Payment Settings',
+      icon: QrCode,
+    },
+    {
+      id: 'profile' as const,
+      label: 'Admin Profile',
+      icon: UserCheck,
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Top Header Bar */}
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col relative overflow-x-hidden">
+      {/* ======================================================== */}
+      {/* 1. COLLAPSIBLE SIDEBAR NAVIGATION DRAWER                 */}
+      {/* ======================================================== */}
+      {/* Backdrop overlay on mobile */}
+      {isSidebarOpen && (
+        <div
+          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-xs transition-opacity"
+        />
+      )}
+
+      {/* Sidebar Drawer */}
+      <aside
+        className={`fixed top-0 left-0 bottom-0 z-50 w-72 bg-slate-900 border-r border-slate-800 flex flex-col justify-between transition-transform duration-300 ease-in-out ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } shadow-2xl`}
+      >
+        <div>
+          {/* Drawer Brand Header */}
+          <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-9 h-9 bg-[#e31837] rounded-xl flex items-center justify-center text-xl shadow-md">
+                🧀
+              </div>
+              <div>
+                <h2 className="font-black text-sm text-white tracking-tight">7Cheese POS</h2>
+                <span className="text-[10.5px] text-slate-400">Restaurant Management</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Navigation Items */}
+          <nav className="p-3 space-y-1.5">
+            {sidebarNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeSidebarTab === item.id;
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveSidebarTab(item.id);
+                    setIsSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-[#e31837] text-white shadow-lg shadow-red-950/50 scale-[1.01]'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </div>
+
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <span
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                        isActive ? 'bg-white text-[#e31837]' : 'bg-amber-400 text-slate-950'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Drawer Bottom Log Out & Store Info */}
+        <div className="p-4 border-t border-slate-800 space-y-3">
+          <div className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl flex items-center space-x-2.5 text-xs text-slate-400">
+            <MapPin className="w-4 h-4 text-red-400 shrink-0" />
+            <div className="min-w-0">
+              <span className="font-extrabold text-slate-200 block truncate">Haldwani Outlet</span>
+              <span className="text-[10px] text-slate-500 block truncate">Kaladhungi Rd, 263139</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            className="w-full bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 hover:text-white text-xs font-black py-2.5 rounded-xl transition-colors flex items-center justify-center space-x-2 cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* ======================================================== */}
+      {/* 2. TOP HEADER BAR WITH HAMBURGER BUTTON                  */}
+      {/* ======================================================== */}
       <header className="sticky top-0 z-30 bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between shadow-lg backdrop-blur-md">
         <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 bg-[#e31837] rounded-xl flex items-center justify-center text-xl shadow-md shrink-0">
-            🧀
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <h1 className="text-sm font-black text-white leading-tight">7Cheese POS Terminal</h1>
-              <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black px-1.5 py-0.2 rounded-md">
-                LIVE KITCHEN
-              </span>
+          {/* Hamburger ☰ Icon Button */}
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="w-9 h-9 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 hover:text-white rounded-xl flex items-center justify-center cursor-pointer transition-all border border-slate-700 shadow-xs"
+            title="Open Menu Navigation"
+          >
+            <MenuIcon className="w-5 h-5" />
+          </button>
+
+          <div className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 bg-[#e31837] rounded-xl flex items-center justify-center text-lg shadow-md shrink-0">
+              🧀
             </div>
-            <p className="text-[10.5px] text-slate-400">Haldwani Outlet (263139)</p>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h1 className="text-sm font-black text-white leading-tight">
+                  {sidebarNavItems.find((n) => n.id === activeSidebarTab)?.label || 'POS Terminal'}
+                </h1>
+                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black px-1.5 py-0.2 rounded-md">
+                  LIVE POS
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400">7Cheese Pizza • Haldwani</p>
+            </div>
           </div>
         </div>
 
@@ -544,10 +808,11 @@ _Please ensure hot & cheesy delivery!_`;
             onClick={() => {
               fetchOrders();
               fetchMenu();
+              fetchPaymentSettings();
             }}
             disabled={isLoadingOrders || isLoadingMenu}
             className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
-            title="Refresh Live Orders"
+            title="Refresh Orders & Menu"
           >
             <RefreshCw
               className={`w-3.5 h-3.5 ${
@@ -562,16 +827,16 @@ _Please ensure hot & cheesy delivery!_`;
             className="flex items-center space-x-1.5 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Sign Out</span>
+            <span className="hidden sm:inline">Log Out</span>
           </button>
         </div>
       </header>
 
-      {/* Main Operational Body */}
+      {/* ======================================================== */}
+      {/* 3. MAIN OPERATIONAL CONTAINER                            */}
+      {/* ======================================================== */}
       <main className="p-4 sm:p-6 flex-1 space-y-5 max-w-7xl w-full mx-auto">
-        {/* ======================================================== */}
-        {/* 1. TOP METRIC KPI CARDS                                   */}
-        {/* ======================================================== */}
+        {/* KPI Metrics */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
           <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-md">
             <div className="flex items-center justify-between text-slate-400 text-xs font-bold">
@@ -586,7 +851,7 @@ _Please ensure hot & cheesy delivery!_`;
 
           <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-md">
             <div className="flex items-center justify-between text-slate-400 text-xs font-bold">
-              <span>Active Table Orders</span>
+              <span>Active Dine-in</span>
               <UtensilsCrossed className="w-4 h-4 text-amber-400" />
             </div>
             <p className="text-xl sm:text-2xl font-black text-amber-400 mt-1.5">
@@ -623,145 +888,108 @@ _Please ensure hot & cheesy delivery!_`;
         </div>
 
         {/* ======================================================== */}
-        {/* 2. PRIMARY HIGH-CONTRAST POS NAVIGATION TABS (Pills Row)  */}
+        {/* VIEW A: LIVE ORDERS (DINE-IN & DELIVERY STREAMS)         */}
         {/* ======================================================== */}
-        <div className="bg-slate-900/95 border border-slate-800 p-2 rounded-2xl shadow-lg">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-            {/* Tab 1: Dine-in Orders */}
-            <button
-              onClick={() => {
-                setPrimaryTab('dine-in');
-                setOrderSubFilter('All');
-              }}
-              className={`py-3 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-2 cursor-pointer ${
-                primaryTab === 'dine-in'
-                  ? 'bg-[#e31837] text-white shadow-lg shadow-red-900/40 scale-[1.01]'
-                  : 'bg-slate-950 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800/80'
-              }`}
-            >
-              <UtensilsCrossed className="w-4 h-4 shrink-0" />
-              <span>🍽️ Live Dine-In Orders</span>
-              {analyticsData.activeDineInCount > 0 && (
-                <span
-                  className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
-                    primaryTab === 'dine-in'
-                      ? 'bg-white text-[#e31837]'
-                      : 'bg-amber-400 text-slate-950'
-                  }`}
-                >
-                  {analyticsData.activeDineInCount}
-                </span>
-              )}
-            </button>
-
-            {/* Tab 2: Delivery Orders */}
-            <button
-              onClick={() => {
-                setPrimaryTab('delivery');
-                setOrderSubFilter('All');
-              }}
-              className={`py-3 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-2 cursor-pointer ${
-                primaryTab === 'delivery'
-                  ? 'bg-[#e31837] text-white shadow-lg shadow-red-900/40 scale-[1.01]'
-                  : 'bg-slate-950 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800/80'
-              }`}
-            >
-              <Bike className="w-4 h-4 shrink-0" />
-              <span>🛵 Live Delivery Orders</span>
-              {analyticsData.activeDeliveryCount > 0 && (
-                <span
-                  className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
-                    primaryTab === 'delivery'
-                      ? 'bg-white text-[#e31837]'
-                      : 'bg-blue-400 text-slate-950'
-                  }`}
-                >
-                  {analyticsData.activeDeliveryCount}
-                </span>
-              )}
-            </button>
-
-            {/* Tab 3: Menu & Inventory */}
-            <button
-              onClick={() => setPrimaryTab('menu')}
-              className={`py-3 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-2 cursor-pointer ${
-                primaryTab === 'menu'
-                  ? 'bg-[#e31837] text-white shadow-lg shadow-red-900/40 scale-[1.01]'
-                  : 'bg-slate-950 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800/80'
-              }`}
-            >
-              <Package className="w-4 h-4 shrink-0" />
-              <span>📦 Menu & Inventory</span>
-            </button>
-
-            {/* Tab 4: Analytics */}
-            <button
-              onClick={() => setPrimaryTab('analytics')}
-              className={`py-3 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-2 cursor-pointer ${
-                primaryTab === 'analytics'
-                  ? 'bg-[#e31837] text-white shadow-lg shadow-red-900/40 scale-[1.01]'
-                  : 'bg-slate-950 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800/80'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4 shrink-0" />
-              <span>📈 Analytics</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ======================================================== */}
-        {/* 3. SECONDARY ROW OF SUB-FILTER CHIPS (For Orders Tabs)   */}
-        {/* ======================================================== */}
-        {(primaryTab === 'dine-in' || primaryTab === 'delivery') && (
-          <div className="flex items-center space-x-2 overflow-x-auto pb-1 no-scrollbar">
-            {(
-              [
-                { key: 'All', label: 'All Orders' },
-                { key: 'Pending', label: 'New' },
-                { key: 'Preparing', label: 'Preparing' },
-                { key: 'Dispatched', label: 'Ready' },
-                { key: 'Delivered', label: 'Completed/Delivered' },
-              ] as const
-            ).map((chip) => {
-              const count = subFilterCounts[chip.key];
-              const isActive = orderSubFilter === chip.key;
-
-              return (
+        {activeSidebarTab === 'orders' && (
+          <div className="space-y-4">
+            {/* Order Stream Switcher (Dine-in vs Delivery) */}
+            <div className="bg-slate-900/95 border border-slate-800 p-2 rounded-2xl shadow-md">
+              <div className="grid grid-cols-2 gap-2">
                 <button
-                  key={chip.key}
-                  onClick={() => setOrderSubFilter(chip.key)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all shrink-0 flex items-center space-x-1.5 cursor-pointer ${
-                    isActive
-                      ? 'bg-white text-slate-950 shadow-md font-black'
-                      : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+                  onClick={() => {
+                    setOrdersStream('dine-in');
+                    setOrderSubFilter('All');
+                  }}
+                  className={`py-3 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-2 cursor-pointer ${
+                    ordersStream === 'dine-in'
+                      ? 'bg-[#e31837] text-white shadow-lg shadow-red-950/50'
+                      : 'bg-slate-950 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
                   }`}
                 >
-                  <span>{chip.label}</span>
-                  <span
-                    className={`text-[10px] font-black px-1.5 py-0.2 rounded-md ${
-                      isActive ? 'bg-slate-200 text-slate-900' : 'bg-slate-800 text-slate-400'
+                  <UtensilsCrossed className="w-4 h-4" />
+                  <span>🍽️ Live Dine-In Orders</span>
+                  {analyticsData.activeDineInCount > 0 && (
+                    <span
+                      className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+                        ordersStream === 'dine-in' ? 'bg-white text-[#e31837]' : 'bg-amber-400 text-slate-950'
+                      }`}
+                    >
+                      {analyticsData.activeDineInCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => {
+                    setOrdersStream('delivery');
+                    setOrderSubFilter('All');
+                  }}
+                  className={`py-3 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-2 cursor-pointer ${
+                    ordersStream === 'delivery'
+                      ? 'bg-[#e31837] text-white shadow-lg shadow-red-950/50'
+                      : 'bg-slate-950 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+                  }`}
+                >
+                  <Bike className="w-4 h-4" />
+                  <span>🛵 Live Delivery Orders</span>
+                  {analyticsData.activeDeliveryCount > 0 && (
+                    <span
+                      className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+                        ordersStream === 'delivery' ? 'bg-white text-[#e31837]' : 'bg-blue-400 text-slate-950'
+                      }`}
+                    >
+                      {analyticsData.activeDeliveryCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Sub-status filter chips */}
+            <div className="flex items-center space-x-2 overflow-x-auto pb-1 no-scrollbar">
+              {(
+                [
+                  { key: 'All', label: 'All Orders' },
+                  { key: 'Pending', label: 'New' },
+                  { key: 'Preparing', label: 'Preparing' },
+                  { key: 'Dispatched', label: 'Ready' },
+                  { key: 'Delivered', label: 'Completed' },
+                ] as const
+              ).map((chip) => {
+                const count = subFilterCounts[chip.key];
+                const isActive = orderSubFilter === chip.key;
+
+                return (
+                  <button
+                    key={chip.key}
+                    onClick={() => setOrderSubFilter(chip.key)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all shrink-0 flex items-center space-x-1.5 cursor-pointer ${
+                      isActive
+                        ? 'bg-white text-slate-950 shadow-md font-black'
+                        : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+                    <span>{chip.label}</span>
+                    <span
+                      className={`text-[10px] font-black px-1.5 py-0.2 rounded-md ${
+                        isActive ? 'bg-slate-200 text-slate-900' : 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
-        {/* ======================================================== */}
-        {/* 4. ORDERS GRID VIEW (Dine-in OR Delivery)                */}
-        {/* ======================================================== */}
-        {(primaryTab === 'dine-in' || primaryTab === 'delivery') && (
-          <div>
+            {/* Order Cards Grid */}
             {displayedOrders.length === 0 ? (
               <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-12 text-center">
                 <div className="w-14 h-14 bg-slate-800 text-slate-500 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
-                  {primaryTab === 'dine-in' ? '🍽️' : '🛵'}
+                  {ordersStream === 'dine-in' ? '🍽️' : '🛵'}
                 </div>
                 <h3 className="text-base font-extrabold text-slate-300">
-                  No {primaryTab === 'dine-in' ? 'Dine-In' : 'Delivery'} Orders Found
+                  No {ordersStream === 'dine-in' ? 'Dine-In' : 'Delivery'} Orders Found
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
                   Orders in status "{orderSubFilter}" will appear here in real-time.
@@ -780,7 +1008,7 @@ _Please ensure hot & cheesy delivery!_`;
                       className="bg-slate-900/95 border border-slate-800 hover:border-slate-700 rounded-2xl p-4 shadow-xl flex flex-col justify-between space-y-3 transition-all"
                     >
                       <div>
-                        {/* High-Contrast Prominent Table Banner for Dine-In */}
+                        {/* High-Contrast Table Banner for Dine-In */}
                         {isDineIn ? (
                           <div className="mb-2.5 bg-gradient-to-r from-amber-500/25 to-amber-600/20 border-2 border-amber-400/70 rounded-xl p-2.5 flex items-center justify-between shadow-inner">
                             <div className="flex items-center space-x-2">
@@ -810,7 +1038,7 @@ _Please ensure hot & cheesy delivery!_`;
                           </div>
                         )}
 
-                        {/* Order Header: ID, Badge, Timestamp */}
+                        {/* Order Header: ID, Payment Badge, Timestamp */}
                         <div className="flex items-start justify-between border-b border-slate-800 pb-2">
                           <div>
                             <div className="flex items-center space-x-2">
@@ -824,10 +1052,34 @@ _Please ensure hot & cheesy delivery!_`;
                               })}
                             </span>
                           </div>
-                          <div>{getStatusBadge(order.status)}</div>
+
+                          <div className="flex flex-col items-end space-y-1">
+                            {getStatusBadge(order.status)}
+
+                            {/* Payment Badge */}
+                            <span
+                              className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-black ${
+                                order.paymentMethod === 'UPI'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              }`}
+                            >
+                              {order.paymentMethod === 'UPI' ? (
+                                <>
+                                  <QrCode className="w-2.5 h-2.5" />
+                                  <span>Payment: UPI</span>
+                                </>
+                              ) : (
+                                <>
+                                  <CreditCard className="w-2.5 h-2.5" />
+                                  <span>Payment: COD</span>
+                                </>
+                              )}
+                            </span>
+                          </div>
                         </div>
 
-                        {/* Customer & Location info */}
+                        {/* Customer & Address Details */}
                         <div className="py-2 space-y-1 text-xs text-slate-300">
                           <div className="flex items-center space-x-1.5 text-slate-400 text-[11px]">
                             <Phone className="w-3 h-3 text-slate-500 shrink-0" />
@@ -979,9 +1231,9 @@ _Please ensure hot & cheesy delivery!_`;
         )}
 
         {/* ======================================================== */}
-        {/* 5. MENU & INVENTORY VIEW                                 */}
+        {/* VIEW B: MENU MANAGEMENT (CARD-BASED LIST)                */}
         {/* ======================================================== */}
-        {primaryTab === 'menu' && (
+        {activeSidebarTab === 'menu' && (
           <div className="space-y-4">
             {/* Search & Category Filter Controls */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/90 p-4 rounded-2xl border border-slate-800">
@@ -1029,7 +1281,7 @@ _Please ensure hot & cheesy delivery!_`;
               ))}
             </div>
 
-            {/* Responsive Card-Based Menu Items Grid (Mobile Stacked, Multi-col on Desktop) */}
+            {/* Responsive Card-Based Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {filteredProducts.map((product) => {
                 const inStock = product.inStock !== false;
@@ -1100,9 +1352,8 @@ _Please ensure hot & cheesy delivery!_`;
                       </div>
                     </div>
 
-                    {/* Bottom Row (Actions): Side-by-side Stock Toggle & Edit Buttons */}
+                    {/* Bottom Row: Stock status toggle & Edit button */}
                     <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
-                      {/* In Stock / Out of Stock Toggle */}
                       <button
                         type="button"
                         onClick={() => handleToggleStock(product)}
@@ -1120,7 +1371,6 @@ _Please ensure hot & cheesy delivery!_`;
                         <span>{inStock ? 'IN STOCK' : 'OUT OF STOCK'}</span>
                       </button>
 
-                      {/* Edit Button */}
                       <button
                         type="button"
                         onClick={() => setEditingProduct({ ...product })}
@@ -1138,11 +1388,10 @@ _Please ensure hot & cheesy delivery!_`;
         )}
 
         {/* ======================================================== */}
-        {/* 6. ANALYTICS VIEW                                        */}
+        {/* VIEW C: SALES ANALYTICS                                  */}
         {/* ======================================================== */}
-        {primaryTab === 'analytics' && (
+        {activeSidebarTab === 'analytics' && (
           <div className="space-y-6">
-            {/* 7-Day Interactive Sales Bar Chart */}
             <div className="bg-slate-900/90 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -1154,7 +1403,6 @@ _Please ensure hot & cheesy delivery!_`;
                 </span>
               </div>
 
-              {/* Bar Chart Container */}
               <div className="pt-6 pb-2">
                 <div className="h-48 flex items-end justify-between gap-3 sm:gap-6 border-b border-slate-800 px-2">
                   {analyticsData.last7DaysSales.map((item, idx) => {
@@ -1166,18 +1414,15 @@ _Please ensure hot & cheesy delivery!_`;
 
                     return (
                       <div key={idx} className="flex-1 flex flex-col items-center group relative">
-                        {/* Hover Tooltip */}
                         <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-[10px] font-black py-1 px-2 rounded-md shadow-lg pointer-events-none whitespace-nowrap z-20">
                           ₹{item.revenue} ({item.orderCount} orders)
                         </div>
 
-                        {/* Bar */}
                         <div
                           style={{ height: `${heightPercent}%` }}
                           className="w-full max-w-[44px] bg-gradient-to-t from-[#e31837] to-red-500 rounded-t-lg shadow-md group-hover:brightness-125 transition-all relative overflow-hidden"
                         />
 
-                        {/* Day & Date Label */}
                         <div className="mt-2 text-center">
                           <span className="text-[11px] font-bold text-slate-300 block">{item.day}</span>
                           <span className="text-[9px] text-slate-500 block">{item.date}</span>
@@ -1189,7 +1434,6 @@ _Please ensure hot & cheesy delivery!_`;
               </div>
             </div>
 
-            {/* Top Selling Pizzas & Efficiency */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl">
                 <h3 className="text-sm font-black text-white mb-4">🏆 Highest Selling Items</h3>
@@ -1230,10 +1474,6 @@ _Please ensure hot & cheesy delivery!_`;
                         {Math.round((analyticsData.deliveryOrdersCount / Math.max(1, orders.length)) * 100)}%
                       </span>
                     </div>
-                    <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80 flex justify-between items-center">
-                      <span>Average Kitchen Prep Time</span>
-                      <span className="font-black text-emerald-400">12 Mins</span>
-                    </div>
                   </div>
                 </div>
 
@@ -1244,10 +1484,240 @@ _Please ensure hot & cheesy delivery!_`;
             </div>
           </div>
         )}
+
+        {/* ======================================================== */}
+        {/* VIEW D: PAYMENT SETTINGS (UPI & QR CONFIGURATION)        */}
+        {/* ======================================================== */}
+        {activeSidebarTab === 'payment-settings' && (
+          <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+              <div className="flex items-center space-x-3 border-b border-slate-800 pb-4">
+                <div className="w-10 h-10 bg-blue-600/20 text-blue-400 rounded-xl flex items-center justify-center">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="font-black text-base text-white">Restaurant Payment Settings</h2>
+                  <p className="text-xs text-slate-400">
+                    Configure your UPI ID & QR Code displayed in customer checkout.
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSavePaymentSettings} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1.5 uppercase tracking-wider text-[11px]">
+                    Restaurant UPI ID
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentSettings.upiId}
+                    onChange={(e) =>
+                      setPaymentSettings({ ...paymentSettings, upiId: e.target.value })
+                    }
+                    placeholder="e.g. 7cheesepizza@okhdfcbank"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white font-mono placeholder-slate-500 outline-none focus:border-[#e31837]"
+                    required
+                  />
+                  <span className="text-[10.5px] text-slate-500 mt-1 block">
+                    Customer UPI payments will be addressed directly to this VPA ID.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1.5 uppercase tracking-wider text-[11px]">
+                    UPI QR Code Image URL (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    value={paymentSettings.upiQrUrl}
+                    onChange={(e) =>
+                      setPaymentSettings({ ...paymentSettings, upiQrUrl: e.target.value })
+                    }
+                    placeholder="https://..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none focus:border-[#e31837]"
+                  />
+                  <span className="text-[10.5px] text-slate-500 mt-1 block">
+                    Leave blank to auto-generate a dynamic QR code based on your UPI ID.
+                  </span>
+                </div>
+
+                {/* QR Code Live Preview */}
+                <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 flex items-center space-x-4">
+                  <img
+                    src={
+                      paymentSettings.upiQrUrl ||
+                      `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi%3A%2F%2Fpay%3Fpa%3D${encodeURIComponent(
+                        paymentSettings.upiId || DEFAULT_PAYMENT_SETTINGS.upiId
+                      )}%26pn%3D7Cheese%2520Pizza%26cu%3DINR`
+                    }
+                    alt="UPI Preview"
+                    className="w-24 h-24 rounded-xl object-contain bg-white p-1 border border-slate-700"
+                  />
+                  <div className="space-y-1">
+                    <span className="font-extrabold text-sm text-white block">Active Customer QR Preview</span>
+                    <p className="text-[11px] text-slate-400">
+                      UPI ID: <strong className="text-emerald-400 font-mono">{paymentSettings.upiId}</strong>
+                    </p>
+                    <span className="text-[10px] text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md inline-block">
+                      ✓ Instant Settlement
+                    </span>
+                  </div>
+                </div>
+
+                {paymentSaveMessage && (
+                  <div className="p-3 bg-emerald-950/50 border border-emerald-800/50 rounded-xl text-emerald-300 text-xs font-bold animate-fade-in">
+                    {paymentSaveMessage}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isSavingPayment}
+                  className="w-full bg-[#e31837] hover:bg-[#c4122d] text-white font-black text-xs py-3.5 rounded-xl shadow-lg shadow-red-950/50 transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isSavingPayment ? 'Saving Settings...' : 'Save Payment Configuration'}</span>
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* VIEW E: ADMIN PROFILE & SECURITY SETTINGS               */}
+        {/* ======================================================== */}
+        {activeSidebarTab === 'profile' && (
+          <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+              <div className="flex items-center space-x-3 border-b border-slate-800 pb-4">
+                <div className="w-10 h-10 bg-purple-600/20 text-purple-400 rounded-xl flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="font-black text-base text-white">Admin Profile & Security</h2>
+                  <p className="text-xs text-slate-400">Manage administrator ID, email, and password.</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveProfile} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1.5 uppercase tracking-wider text-[11px]">
+                      Admin Login ID
+                    </label>
+                    <input
+                      type="text"
+                      value={profileData.username}
+                      onChange={(e) => setProfileData({ ...profileData, username: e.target.value })}
+                      placeholder="e.g. 7cheese_admin"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-[#e31837]"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1.5 uppercase tracking-wider text-[11px]">
+                      Admin Notification Email
+                    </label>
+                    <input
+                      type="email"
+                      value={profileData.email}
+                      onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                      placeholder="admin@7cheesepizza.com"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-[#e31837]"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Change Password Section */}
+                <div className="pt-4 border-t border-slate-800 space-y-3">
+                  <div className="flex items-center space-x-2 text-slate-200 font-extrabold text-xs">
+                    <Key className="w-4 h-4 text-amber-400" />
+                    <span>Change Admin Password</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-bold mb-1 text-[11px]">
+                      Current Password (Required to save changes)
+                    </label>
+                    <input
+                      type="password"
+                      value={currentPasswordInput}
+                      onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                      placeholder="Enter current password"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-[#e31837]"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 font-bold mb-1 text-[11px]">
+                        New Password
+                      </label>
+                      <input
+                        type="password"
+                        value={newPasswordInput}
+                        onChange={(e) => setNewPasswordInput(e.target.value)}
+                        placeholder="Leave blank to keep same"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-[#e31837]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 font-bold mb-1 text-[11px]">
+                        Confirm New Password
+                      </label>
+                      <input
+                        type="password"
+                        value={confirmPasswordInput}
+                        onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                        placeholder="Re-enter new password"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-[#e31837]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {profileMessage && (
+                  <div
+                    className={`p-3 rounded-xl text-xs font-bold animate-fade-in ${
+                      profileMessage.type === 'success'
+                        ? 'bg-emerald-950/50 border border-emerald-800/50 text-emerald-300'
+                        : 'bg-red-950/50 border border-red-800/50 text-red-300'
+                    }`}
+                  >
+                    {profileMessage.text}
+                  </div>
+                )}
+
+                <div className="flex items-center space-x-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSavingProfile}
+                    className="flex-1 bg-[#e31837] hover:bg-[#c4122d] text-white font-black text-xs py-3.5 rounded-xl shadow-lg shadow-red-950/50 transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isSavingProfile ? 'Saving...' : 'Update Admin Credentials'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-3.5 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Log Out
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* ======================================================== */}
-      {/* 7. EDIT MENU ITEM MODAL                                  */}
+      {/* 4. EDIT MENU ITEM MODAL                                  */}
       {/* ======================================================== */}
       {editingProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-fade-in">
