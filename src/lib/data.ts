@@ -64,6 +64,42 @@ export const INITIAL_BANNERS: BannerItem[] = [
   },
 ];
 
+export interface OfferItem {
+  id: string;
+  title: string;
+  description: string;
+  promoCode?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export const INITIAL_OFFERS: OfferItem[] = [
+  {
+    id: 'off-1',
+    title: 'Funday Friday',
+    description: 'Buy 1 Get 1 Free on Medium & Large Pizzas',
+    promoCode: 'BOGOFRIDAY',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'off-2',
+    title: 'Flat ₹100 OFF',
+    description: 'Get flat ₹100 instant discount on all orders above ₹499',
+    promoCode: 'CHEESE100',
+    isActive: true,
+    createdAt: new Date(Date.now() - 3600000).toISOString(),
+  },
+  {
+    id: 'off-3',
+    title: 'Free Cheesy Garlic Bread',
+    description: 'Complimentary Garlic Breadsticks on cart total over ₹399',
+    promoCode: 'FREEBREAD',
+    isActive: false,
+    createdAt: new Date(Date.now() - 7200000).toISOString(),
+  },
+];
+
 export const INITIAL_CATEGORIES: CategoryItem[] = [
   { id: 'cat-1', name: 'Veg Pizzas', slug: 'veg-pizzas', icon: '🍕', sortOrder: 1 },
   { id: 'cat-2', name: 'Non-Veg Pizzas', slug: 'non-veg-pizzas', icon: '🍗', sortOrder: 2 },

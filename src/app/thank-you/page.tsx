@@ -149,16 +149,10 @@ function ThankYouContent() {
               </div>
 
               <div>
-                <span className="text-[10px] text-slate-500 block">Payment Method</span>
-                <span
-                  className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[11px] font-black mt-0.5 ${
-                    paymentMethod === 'UPI'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                  }`}
-                >
-                  {paymentMethod === 'UPI' ? <QrCode className="w-3 h-3" /> : <CreditCard className="w-3 h-3" />}
-                  <span>{paymentMethod === 'UPI' ? 'Paid via UPI' : 'Cash on Delivery (COD)'}</span>
+                <span className="text-[10px] text-slate-500 block">Payment Mode</span>
+                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[11px] font-black mt-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  <CreditCard className="w-3 h-3" />
+                  <span>{isDineIn ? 'Pay at Counter' : 'Pay on Delivery'}</span>
                 </span>
               </div>
             </div>

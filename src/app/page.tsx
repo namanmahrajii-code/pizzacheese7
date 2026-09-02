@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import Header from '@/components/Header';
+import OffersBanner from '@/components/OffersBanner';
 import BannerCarousel from '@/components/BannerCarousel';
 import CategoryScroll from '@/components/CategoryScroll';
 import FilterBar from '@/components/FilterBar';
@@ -10,6 +11,7 @@ import ModifierModal from '@/components/ModifierModal';
 import CartDrawer from '@/components/CartDrawer';
 import BottomNav from '@/components/BottomNav';
 import OrderStatusModal from '@/components/OrderStatusModal';
+import ActiveOrderTracking from '@/components/ActiveOrderTracking';
 import {
   ProductItem,
   CategoryItem,
@@ -37,6 +39,20 @@ function HomeContent() {
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [isOrderStatusOpen, setIsOrderStatusOpen] = useState<boolean>(false);
+  const [recoveredOrderId, setRecoveredOrderId] = useState<string | null>(null);
+
+  // Auto-Recover Order on Page Load:
+  // Runs on mount to check for an active order: const savedOrderId = localStorage.getItem('activeOrderId')
+  useEffect(() => {
+    try {
+      const savedOrderId = localStorage.getItem('activeOrderId');
+      if (savedOrderId) {
+        setRecoveredOrderId(savedOrderId);
+      }
+    } catch (e) {
+      console.warn('Could not read activeOrderId from localStorage:', e);
+    }
+  }, []);
 
   // Fetch live menu from API (with instant static data already pre-loaded)
   useEffect(() => {
@@ -108,6 +124,22 @@ function HomeContent() {
     }
   };
 
+  // If savedOrderId exists, bypass the standard menu/cart view and immediately display the 'Order Tracking / Active Order' UI.
+  if (recoveredOrderId) {
+    return (
+      <ActiveOrderTracking
+        orderId={recoveredOrderId}
+        onBackToMenu={() => setRecoveredOrderId(null)}
+        onOrderFinished={() => {
+          try {
+            localStorage.removeItem('activeOrderId');
+          } catch (e) {}
+          setRecoveredOrderId(null);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f4f6f8] text-gray-900 pb-28">
       {/* Mobile-sized container constraint */}
@@ -117,6 +149,9 @@ function HomeContent() {
           onSearchChange={(q) => setSearchQuery(q)}
           onOpenProfile={() => setIsCartOpen(true)}
         />
+
+        {/* Dynamic Live Offers & Promos Banner */}
+        <OffersBanner onApplyCoupon={() => setIsCartOpen(true)} />
 
         {/* Hero Banner Carousel (Domino's Style) */}
         <BannerCarousel

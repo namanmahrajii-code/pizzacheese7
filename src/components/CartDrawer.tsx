@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   X,
   Plus,
@@ -15,14 +15,14 @@ import {
   AlertCircle,
   ShoppingBag,
   Sparkles,
-  QrCode,
   CreditCard,
-  Copy,
   Check,
 } from 'lucide-react';
 import { useCartStore } from '@/store/cartStore';
 import VegNonVegIcon from './VegNonVegIcon';
 import confetti from 'canvas-confetti';
+import { db } from '@/lib/firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -31,6 +31,7 @@ interface CartDrawerProps {
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrderPlaced }) => {
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isDineInRoute = pathname?.startsWith('/dine-in');
@@ -60,33 +61,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
 
   const [couponInput, setCouponInput] = useState('');
   const [couponFeedback, setCouponFeedback] = useState<{ success?: boolean; message?: string } | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const isSubmitting = isLoading;
+  const setIsSubmitting = setIsLoading;
   const [formError, setFormError] = useState<string | null>(null);
-
-  // Payment Method Selection
-  const [paymentMethod, setPaymentMethod] = useState<'COD' | 'UPI'>('COD');
-  const [paymentSettings, setPaymentSettings] = useState({
-    upiId: '7cheesepizza@okhdfcbank',
-    upiQrUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi%3A%2F%2Fpay%3Fpa%3D7cheesepizza%40okhdfcbank%26pn%3D7Cheese%2520Pizza%26cu%3DINR',
-    restaurantName: '7Cheese Pizza Haldwani',
-  });
-  const [copiedUpi, setCopiedUpi] = useState(false);
 
   // Editable customer details
   const [name, setName] = useState(customerName || '');
   const [phone, setPhone] = useState(customerPhone || '');
   const [addressLine1, setAddressLine1] = useState('');
   const [addressLine2, setAddressLine2] = useState('');
-
-  // Fetch live payment settings from backend
-  useEffect(() => {
-    fetch('/api/settings/payment')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.upiId) setPaymentSettings(data);
-      })
-      .catch((err) => console.log('Using default payment settings'));
-  }, []);
 
   // Read table param from URL if present (e.g. /dine-in?table=5)
   const urlTable = searchParams?.get('table') || '';
@@ -180,7 +164,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
     });
   };
 
-  const handlePlaceOrder = async () => {
+  const handlePlaceOrder = async (e?: React.SyntheticEvent) => {
+    // Prevent any synthetic event propagation or form reload
+    if (e?.preventDefault) {
+      e.preventDefault();
+    }
+
     if (items.length === 0) return;
     setFormError(null);
 
@@ -202,7 +191,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
       }
     }
 
-    setIsSubmitting(true);
+    // 2. Non-blocking Geolocation: If GPS detection is running, cancel wait immediately
+    if (isLocating) {
+      setIsLocating(false);
+    }
+
+    // 3. Instant Execution: Set isLoading to true
+    setIsLoading(true);
 
     const combinedDeliveryAddress = [addressLine1.trim(), addressLine2.trim()].filter(Boolean).join(', ');
 
@@ -218,53 +213,102 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
     const finalAddress = isDineInRoute
       ? `Table #${tableNum.trim()} (7Cheese Pizza Haldwani)`
       : combinedDeliveryAddress || 'Kaladhungi Road, Haldwani (263139)';
+    const impliedPaymentMethod = isDineInRoute ? 'Pay at Counter' : 'Pay on Delivery';
 
-    const orderPayload = {
-      customerName: name.trim() || (isDineInRoute ? 'Dine-in Customer' : 'Valued Customer'),
-      customerPhone: isDineInRoute ? 'N/A' : phone.trim(),
-      deliveryAddress: finalAddress,
-      deliveryType: currentMode,
-      orderType: currentMode,
-      tableNumber: isDineInRoute ? tableNum.trim() : null,
-      paymentMethod,
-      totalAmount: grandTotal,
-      coordinates: !isDineInRoute ? coordinates : null,
-      items: items.map((item) => ({
-        productId: item.productId,
-        name: item.name,
-        size: item.size,
-        crust: item.crust,
-        quantity: item.quantity,
-        price: item.price * item.quantity,
-      })),
+    // 1. Payload Sanitation: Extract ONLY primitive values, stripping out any non-serializable data
+    const sanitizedItems = items.map((item) => ({
+      id: String(item.id || item.productId || ''),
+      name: String(item.name || ''),
+      price: Number(item.price) || 0,
+      quantity: Number(item.quantity) || 1,
+      size: String(item.size || 'Regular'),
+      crust: String(item.crust || 'Standard'),
+    }));
+
+    const cleanPayload = {
+      customerName: String(name || '').trim() || (isDineInRoute ? 'Dine-in Customer' : 'Valued Customer'),
+      customerPhone: isDineInRoute ? 'N/A' : (String(phone || '').trim() || 'N/A'),
+      deliveryAddress: String(finalAddress || '').trim(),
+      deliveryType: String(currentMode),
+      orderType: String(currentMode),
+      tableNumber: isDineInRoute && tableNum ? String(tableNum).trim() : null,
+      paymentMethod: String(impliedPaymentMethod),
+      totalAmount: Number(grandTotal) || 0,
+      coordinates: (!isDineInRoute && coordinates && typeof coordinates.lat === 'number' && typeof coordinates.lng === 'number')
+        ? { lat: coordinates.lat, lng: coordinates.lng }
+        : null,
+      items: sanitizedItems,
+      status: 'Pending',
+      createdAt: new Date().toISOString(),
     };
 
+    // Guarantee clean plain serializable object with zero circular/component references
+    const orderPayload = JSON.parse(JSON.stringify(cleanPayload));
+
+    let placedOrderId = `ORD-${Math.floor(10000 + Math.random() * 90000)}`;
+
     try {
-      const res = await fetch('/api/orders', {
+      // 3. Await clean addDoc Firestore request (with 2s safety race to prevent any network stall)
+      if (db) {
+        try {
+          const firestorePromise = addDoc(collection(db, 'orders'), orderPayload);
+          const timeoutPromise = new Promise<{ id: string }>((resolve) =>
+            setTimeout(() => resolve({ id: placedOrderId }), 2000)
+          );
+          const docRef = (await Promise.race([firestorePromise, timeoutPromise])) as any;
+          if (docRef?.id) {
+            placedOrderId = docRef.id;
+          }
+        } catch (fsErr) {
+          console.warn('Firestore addDoc fallback:', fsErr);
+        }
+      }
+
+      // Immediately save newly created document ID to localStorage for guest order recovery
+      try {
+        localStorage.setItem('activeOrderId', placedOrderId);
+      } catch (e) {
+        console.warn('Failed to save activeOrderId to localStorage:', e);
+      }
+
+      // Non-blocking fire-and-forget sync to server in-memory list
+      fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderPayload),
-      });
+        body: JSON.stringify({ ...orderPayload, id: placedOrderId }),
+      }).catch((err) => console.warn('Order API sync error:', err));
 
-      const data = await res.json();
-      const placedOrderId = data.orderId || `ORD-${Date.now().toString().slice(-6)}`;
       triggerConfetti();
+
+      // Instantly clear Zustand cart state
       clearCart();
-      setIsSubmitting(false);
       onClose();
       onOrderPlaced(placedOrderId);
 
-      // Redirect user to thank you confirmation screen
-      window.location.href = `/thank-you?orderId=${encodeURIComponent(placedOrderId)}&type=${encodeURIComponent(currentMode)}&payment=${encodeURIComponent(paymentMethod)}&table=${encodeURIComponent(tableNum.trim())}`;
+      // Instantly push to the /thank-you route
+      router.push(
+        `/thank-you?orderId=${encodeURIComponent(placedOrderId)}&type=${encodeURIComponent(
+          currentMode
+        )}&payment=${encodeURIComponent(impliedPaymentMethod)}&table=${encodeURIComponent(
+          tableNum.trim()
+        )}`
+      );
     } catch (err) {
       console.error('Order creation error:', err);
-      triggerConfetti();
       clearCart();
-      setIsSubmitting(false);
       onClose();
       const mockId = `7C-${Math.floor(100000 + Math.random() * 900000)}`;
       onOrderPlaced(mockId);
-      window.location.href = `/thank-you?orderId=${encodeURIComponent(mockId)}&type=${encodeURIComponent(currentMode)}&payment=${encodeURIComponent(paymentMethod)}&table=${encodeURIComponent(tableNum.trim())}`;
+      router.push(
+        `/thank-you?orderId=${encodeURIComponent(mockId)}&type=${encodeURIComponent(
+          currentMode
+        )}&payment=${encodeURIComponent(impliedPaymentMethod)}&table=${encodeURIComponent(
+          tableNum.trim()
+        )}`
+      );
+    } finally {
+      // Set isLoading to false in the finally block
+      setIsLoading(false);
     }
   };
 
@@ -683,107 +727,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
                 </div>
               </div>
 
-              {/* PAYMENT METHOD SELECTION */}
-              <div className="bg-white p-3.5 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black uppercase text-gray-800 tracking-wider">
-                    Payment Method
-                  </span>
-                  <span className="text-[10px] font-bold text-gray-500">Choose how to pay</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  {/* Option 1: Cash / COD */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('COD')}
-                    className={`py-2.5 px-3 rounded-2xl border text-xs font-extrabold transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer ${
-                      paymentMethod === 'COD'
-                        ? 'bg-[#002855] text-white border-[#002855] shadow-md scale-[1.01]'
-                        : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    <span className="text-lg">💵</span>
-                    <span className="leading-tight text-center">
-                      {isDineInRoute ? 'Pay at Counter / Cash' : 'Cash on Delivery (COD)'}
-                    </span>
-                  </button>
-
-                  {/* Option 2: UPI Payment */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('UPI')}
-                    className={`py-2.5 px-3 rounded-2xl border text-xs font-extrabold transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer ${
-                      paymentMethod === 'UPI'
-                        ? 'bg-[#002855] text-white border-[#002855] shadow-md scale-[1.01]'
-                        : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    <span className="text-lg">📱</span>
-                    <span className="leading-tight text-center">Pay via UPI</span>
-                  </button>
-                </div>
-
-                {/* UPI QR & Details (if UPI selected) */}
-                {paymentMethod === 'UPI' && (
-                  <div className="p-3.5 bg-gradient-to-b from-blue-50/80 to-slate-50 border border-blue-200/80 rounded-2xl text-center space-y-2.5 animate-fade-in">
-                    <div className="flex items-center justify-center space-x-1 text-xs font-black text-[#002855]">
-                      <span>📱</span>
-                      <span>Scan QR Code with any UPI App</span>
-                    </div>
-
-                    <div className="relative inline-block bg-white p-2 rounded-2xl border-2 border-blue-300/80 shadow-md">
-                      <img
-                        src={
-                          paymentSettings.upiQrUrl ||
-                          `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi%3A%2F%2Fpay%3Fpa%3D${encodeURIComponent(
-                            paymentSettings.upiId || '7cheesepizza@okhdfcbank'
-                          )}%26pn%3D7Cheese%2520Pizza%26am%3D${grandTotal}%26cu%3DINR`
-                        }
-                        alt="UPI QR Code"
-                        className="w-36 h-36 object-contain rounded-xl mx-auto"
-                      />
-                      <span className="text-[10px] font-black text-gray-800 block mt-1">Amount: ₹{grandTotal}</span>
-                    </div>
-
-                    {/* UPI ID with Copy Button */}
-                    <div className="bg-white border border-gray-200 rounded-xl p-2 flex items-center justify-between text-xs">
-                      <div className="text-left min-w-0 pr-2">
-                        <span className="text-[9.5px] font-bold text-gray-400 block uppercase">UPI ID</span>
-                        <span className="font-mono font-black text-gray-800 text-[11px] truncate block">
-                          {paymentSettings.upiId || '7cheesepizza@okhdfcbank'}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(paymentSettings.upiId || '7cheesepizza@okhdfcbank');
-                          setCopiedUpi(true);
-                          setTimeout(() => setCopiedUpi(false), 2000);
-                        }}
-                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-[10px] font-bold px-2.5 py-1 rounded-lg shrink-0 cursor-pointer transition-colors"
-                      >
-                        {copiedUpi ? '✓ Copied' : 'Copy'}
-                      </button>
-                    </div>
-
-                    <p className="text-[10.5px] text-gray-500 leading-tight">
-                      Scan to pay, then click <strong>Place Order (Paid via UPI)</strong> below.
-                    </p>
-
-                    {/* Direct mobile UPI intent */}
-                    <a
-                      href={`upi://pay?pa=${encodeURIComponent(
-                        paymentSettings.upiId || '7cheesepizza@okhdfcbank'
-                      )}&pn=7Cheese%20Pizza&am=${grandTotal}&cu=INR`}
-                      className="block sm:hidden w-full bg-emerald-600 text-white font-black text-xs py-2 rounded-xl shadow-xs"
-                    >
-                      Pay ₹{grandTotal} with GPay / Paytm
-                    </a>
-                  </div>
-                )}
-              </div>
-
               {/* Bill Details Summary */}
               <div className="bg-white p-3.5 rounded-2xl border border-gray-200/80 shadow-xs space-y-2">
                 <span className="text-xs font-black uppercase text-gray-800 tracking-wider block">
@@ -822,7 +765,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
                   </div>
 
                   <div className="pt-2 border-t border-gray-100 flex justify-between items-baseline">
-                    <span className="font-black text-sm text-gray-900">To Pay</span>
+                    <div>
+                      <span className="font-black text-sm text-gray-900 block">To Pay</span>
+                      <span className="text-[10px] text-gray-500 font-bold block">
+                        Payment Mode: {isDineInRoute ? 'Pay at Counter' : 'Cash / UPI on Delivery'}
+                      </span>
+                    </div>
                     <span className="font-black text-base text-[#e31837]">₹{grandTotal}</span>
                   </div>
                 </div>
@@ -836,26 +784,27 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
           <div className="p-4 bg-white border-t border-gray-200 shadow-xl flex items-center justify-between space-x-4">
             <div>
               <span className="text-[10px] text-gray-400 uppercase font-black tracking-wider block">
-                Total ({paymentMethod === 'UPI' ? 'UPI Online' : 'Cash'})
+                Total
               </span>
               <span className="text-xl font-black text-gray-900 leading-tight">₹{grandTotal}</span>
+              <span className="text-[9.5px] text-gray-500 font-semibold block">
+                {isDineInRoute ? 'Pay at Counter' : 'Cash / UPI on Delivery'}
+              </span>
             </div>
 
             <button
               onClick={handlePlaceOrder}
-              disabled={isSubmitting}
+              disabled={isLoading}
               className="flex-1 bg-[#e31837] hover:bg-[#c4122d] active:scale-[0.99] disabled:opacity-50 text-white font-extrabold py-3.5 px-6 rounded-2xl flex items-center justify-center space-x-2 shadow-md transition-all text-xs tracking-wider uppercase cursor-pointer"
             >
-              {isSubmitting ? (
+              {isLoading ? (
                 <>
                   <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   <span>Placing Order...</span>
                 </>
               ) : (
                 <>
-                  <span>
-                    {paymentMethod === 'UPI' ? 'Place Order (Paid via UPI)' : 'Place Order'}
-                  </span>
+                  <span>Place Order</span>
                   <span>→</span>
                 </>
               )}

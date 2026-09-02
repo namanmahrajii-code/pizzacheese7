@@ -37,6 +37,7 @@ import {
   CreditCard,
   QrCode,
   UserCheck,
+  Tag,
   Key,
   Lock,
   Save,
@@ -46,7 +47,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { STORE_LOCATION, DEFAULT_PAYMENT_SETTINGS } from '@/lib/constants';
-import { ProductItem, CategoryItem } from '@/lib/data';
+import { ProductItem, CategoryItem, OfferItem } from '@/lib/data';
 
 interface OrderItemData {
   id: string;
@@ -87,9 +88,9 @@ export default function AdminPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Main Active Sidebar View:
-  // 'orders' | 'menu' | 'analytics' | 'payment-settings' | 'profile'
+  // 'orders' | 'menu' | 'offers' | 'analytics' | 'profile'
   const [activeSidebarTab, setActiveSidebarTab] = useState<
-    'orders' | 'menu' | 'analytics' | 'payment-settings' | 'profile'
+    'orders' | 'menu' | 'offers' | 'analytics' | 'profile'
   >('orders');
 
   // In Orders View: Order Stream selection ('dine-in' vs 'delivery')
@@ -109,6 +110,20 @@ export default function AdminPage() {
   const [selectedMenuCategory, setSelectedMenuCategory] = useState<string>('all');
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
+
+  // Offers & Promos State
+  const [offers, setOffers] = useState<OfferItem[]>([]);
+  const [isLoadingOffers, setIsLoadingOffers] = useState(false);
+  const [editingOffer, setEditingOffer] = useState<OfferItem | null>(null);
+  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
+  const [isSavingOffer, setIsSavingOffer] = useState(false);
+  const [deletingOfferId, setDeletingOfferId] = useState<string | null>(null);
+  const [offerForm, setOfferForm] = useState({
+    title: '',
+    description: '',
+    promoCode: '',
+    isActive: true,
+  });
 
   // Payment Settings State
   const [paymentSettings, setPaymentSettings] = useState({
@@ -137,6 +152,7 @@ export default function AdminPage() {
       setIsAuthenticated(true);
       fetchOrders();
       fetchMenu();
+      fetchOffers();
       fetchPaymentSettings();
       fetchProfileData();
     }
@@ -166,6 +182,19 @@ export default function AdminPage() {
       console.error('Failed to fetch menu:', e);
     } finally {
       setIsLoadingMenu(false);
+    }
+  };
+
+  const fetchOffers = async () => {
+    setIsLoadingOffers(true);
+    try {
+      const res = await fetch('/api/admin/offers');
+      const data = await res.json();
+      if (data.offers) setOffers(data.offers);
+    } catch (e) {
+      console.error('Failed to fetch offers:', e);
+    } finally {
+      setIsLoadingOffers(false);
     }
   };
 
@@ -219,6 +248,7 @@ export default function AdminPage() {
         localStorage.setItem('7cheese_admin_auth', 'true');
         fetchOrders();
         fetchMenu();
+        fetchOffers();
         fetchPaymentSettings();
         fetchProfileData();
       } else {
@@ -300,6 +330,107 @@ export default function AdminPage() {
       console.error('Failed to save product:', err);
     } finally {
       setIsSavingProduct(false);
+    }
+  };
+
+  // Offers & Promos CRUD Handlers
+  const handleOpenCreateOffer = () => {
+    setEditingOffer(null);
+    setOfferForm({
+      title: '',
+      description: '',
+      promoCode: '',
+      isActive: true,
+    });
+    setIsOfferModalOpen(true);
+  };
+
+  const handleOpenEditOffer = (offer: OfferItem) => {
+    setEditingOffer(offer);
+    setOfferForm({
+      title: offer.title,
+      description: offer.description,
+      promoCode: offer.promoCode || '',
+      isActive: offer.isActive !== false,
+    });
+    setIsOfferModalOpen(true);
+  };
+
+  const handleSaveOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!offerForm.title.trim() || !offerForm.description.trim()) return;
+
+    setIsSavingOffer(true);
+    try {
+      if (editingOffer) {
+        const res = await fetch(`/api/admin/offers/${editingOffer.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(offerForm),
+        });
+        const data = await res.json();
+        if (res.ok && data.offer) {
+          setOffers((prev) =>
+            prev.map((o) => (o.id === editingOffer.id ? data.offer : o))
+          );
+          setIsOfferModalOpen(false);
+        }
+      } else {
+        const res = await fetch('/api/admin/offers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(offerForm),
+        });
+        const data = await res.json();
+        if (res.ok && data.offer) {
+          setOffers((prev) => [data.offer, ...prev]);
+          setIsOfferModalOpen(false);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to save offer:', err);
+    } finally {
+      setIsSavingOffer(false);
+    }
+  };
+
+  const handleToggleOfferStatus = async (offer: OfferItem) => {
+    const nextStatus = !offer.isActive;
+    // Optimistic UI update
+    setOffers((prev) =>
+      prev.map((o) => (o.id === offer.id ? { ...o, isActive: nextStatus } : o))
+    );
+
+    try {
+      await fetch(`/api/admin/offers/${offer.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: nextStatus }),
+      });
+    } catch (err) {
+      console.error('Failed to toggle offer status:', err);
+      // Revert on failure
+      setOffers((prev) =>
+        prev.map((o) => (o.id === offer.id ? { ...o, isActive: offer.isActive } : o))
+      );
+    }
+  };
+
+  const handleDeleteOffer = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this offer?')) return;
+
+    setDeletingOfferId(id);
+    try {
+      const res = await fetch(`/api/admin/offers/${id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setOffers((prev) => prev.filter((o) => o.id !== id));
+      }
+    } catch (err) {
+      console.error('Failed to delete offer:', err);
+    } finally {
+      setDeletingOfferId(null);
     }
   };
 
@@ -398,7 +529,7 @@ export default function AdminPage() {
 *Order ID:* #${order.id}
 *Customer:* ${order.customerName}
 *Phone:* ${order.customerPhone}
-*Payment:* ${order.paymentMethod === 'UPI' ? '✅ Paid via UPI' : '💵 Cash on Delivery (Collect ₹' + order.totalAmount + ')'}
+*Payment:* 💵 Collect ₹${order.totalAmount} (Cash / UPI on Delivery)
 *Order Mode:* ${order.deliveryType || 'Delivery'}
 
 *📦 ORDER ITEMS:*
@@ -656,14 +787,15 @@ _Please deliver hot & cheesy!_`;
       icon: Package,
     },
     {
+      id: 'offers' as const,
+      label: '🏷️ Offers & Promos',
+      icon: Tag,
+      badge: offers.filter((o) => o.isActive).length,
+    },
+    {
       id: 'analytics' as const,
       label: 'Sales Analytics',
       icon: BarChart3,
-    },
-    {
-      id: 'payment-settings' as const,
-      label: 'Payment Settings',
-      icon: QrCode,
     },
     {
       id: 'profile' as const,
@@ -808,9 +940,10 @@ _Please deliver hot & cheesy!_`;
             onClick={() => {
               fetchOrders();
               fetchMenu();
+              fetchOffers();
               fetchPaymentSettings();
             }}
-            disabled={isLoadingOrders || isLoadingMenu}
+            disabled={isLoadingOrders || isLoadingMenu || isLoadingOffers}
             className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
             title="Refresh Orders & Menu"
           >
@@ -1055,27 +1188,6 @@ _Please deliver hot & cheesy!_`;
 
                           <div className="flex flex-col items-end space-y-1">
                             {getStatusBadge(order.status)}
-
-                            {/* Payment Badge */}
-                            <span
-                              className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-black ${
-                                order.paymentMethod === 'UPI'
-                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                              }`}
-                            >
-                              {order.paymentMethod === 'UPI' ? (
-                                <>
-                                  <QrCode className="w-2.5 h-2.5" />
-                                  <span>Payment: UPI</span>
-                                </>
-                              ) : (
-                                <>
-                                  <CreditCard className="w-2.5 h-2.5" />
-                                  <span>Payment: COD</span>
-                                </>
-                              )}
-                            </span>
                           </div>
                         </div>
 
@@ -1153,7 +1265,7 @@ _Please deliver hot & cheesy!_`;
                       {/* Total & Action Buttons */}
                       <div className="pt-2 border-t border-slate-800 space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-slate-400">Total Amount</span>
+                          <span className="text-xs text-slate-400 font-semibold">To Collect</span>
                           <span className="text-base font-black text-[#e31837]">₹{order.totalAmount}</span>
                         </div>
 
@@ -1485,99 +1597,301 @@ _Please deliver hot & cheesy!_`;
           </div>
         )}
 
+
         {/* ======================================================== */}
-        {/* VIEW D: PAYMENT SETTINGS (UPI & QR CONFIGURATION)        */}
+        {/* VIEW D: OFFERS & PROMOS MANAGEMENT                     */}
         {/* ======================================================== */}
-        {activeSidebarTab === 'payment-settings' && (
-          <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
-              <div className="flex items-center space-x-3 border-b border-slate-800 pb-4">
-                <div className="w-10 h-10 bg-blue-600/20 text-blue-400 rounded-xl flex items-center justify-center">
-                  <QrCode className="w-5 h-5" />
+        {activeSidebarTab === 'offers' && (
+          <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
+            {/* Top Action Bar */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-2xl flex items-center justify-center text-2xl shadow-md">
+                  🏷️
                 </div>
                 <div>
-                  <h2 className="font-black text-base text-white">Restaurant Payment Settings</h2>
-                  <p className="text-xs text-slate-400">
-                    Configure your UPI ID & QR Code displayed in customer checkout.
+                  <div className="flex items-center space-x-2">
+                    <h2 className="text-lg font-black text-white tracking-tight">Offers & Promos</h2>
+                    <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-black px-2 py-0.5 rounded-full">
+                      {offers.filter((o) => o.isActive).length} Active Live
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Manage real-time customer promo banners and discount codes.
                   </p>
                 </div>
               </div>
 
-              <form onSubmit={handleSavePaymentSettings} className="space-y-4 text-xs">
+              <button
+                type="button"
+                onClick={handleOpenCreateOffer}
+                className="inline-flex items-center justify-center space-x-2 bg-[#e31837] hover:bg-[#c4122d] text-white font-extrabold text-xs px-5 py-3 rounded-2xl shadow-lg shadow-red-950/40 transition-all cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create New Offer</span>
+              </button>
+            </div>
+
+            {/* Offers Cards Grid */}
+            {isLoadingOffers ? (
+              <div className="py-20 text-center space-y-3">
+                <RefreshCw className="w-6 h-6 animate-spin text-[#e31837] mx-auto" />
+                <p className="text-xs text-slate-400 font-bold">Loading promotional offers...</p>
+              </div>
+            ) : offers.length === 0 ? (
+              <div className="p-12 text-center bg-slate-900/60 border border-slate-800 rounded-3xl space-y-3">
+                <span className="text-4xl">🏷️</span>
+                <h3 className="text-sm font-black text-white">No Offers Created Yet</h3>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  Click 'Create New Offer' to add discount codes or promotional banners for your customers.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenCreateOffer}
+                  className="mt-2 bg-[#e31837] hover:bg-[#c4122d] text-white text-xs font-bold px-4 py-2 rounded-xl inline-flex items-center space-x-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create First Offer</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {offers.map((offer) => {
+                  const isActive = offer.isActive !== false;
+
+                  return (
+                    <div
+                      key={offer.id}
+                      className={`flex flex-col justify-between p-5 bg-slate-900 border rounded-3xl shadow-xl transition-all ${
+                        isActive
+                          ? 'border-slate-800 hover:border-slate-700'
+                          : 'border-slate-800/60 opacity-60 bg-slate-950/50'
+                      }`}
+                    >
+                      {/* Top Row: Status badge & Toggle Switch */}
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <span
+                            className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                              isActive
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                : 'bg-slate-800 text-slate-400 border border-slate-700'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                              }`}
+                            />
+                            <span>{isActive ? 'Active (Live)' : 'Inactive (Hidden)'}</span>
+                          </span>
+
+                          {/* Toggle Switch */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleOfferStatus(offer)}
+                            className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer shadow-inner ${
+                              isActive ? 'bg-emerald-600' : 'bg-slate-700'
+                            }`}
+                            title={isActive ? 'Click to deactivate' : 'Click to activate'}
+                          >
+                            <span
+                              className={`w-5 h-5 rounded-full bg-white shadow-md block transition-transform ${
+                                isActive ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Offer Title & Description */}
+                        <h3 className="text-base font-black text-white tracking-tight leading-snug">
+                          {offer.title}
+                        </h3>
+                        <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                          {offer.description}
+                        </p>
+
+                        {/* Promo Code Badge if present */}
+                        {offer.promoCode ? (
+                          <div className="mt-3 inline-flex items-center space-x-1.5 bg-slate-950 border border-dashed border-amber-400/60 px-3 py-1.5 rounded-xl text-xs font-mono font-black text-amber-300">
+                            <Tag className="w-3.5 h-3.5 text-amber-400" />
+                            <span>CODE: {offer.promoCode}</span>
+                          </div>
+                        ) : (
+                          <div className="mt-3 text-[11px] text-slate-500 italic">
+                            No coupon code (Auto-applied deal)
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bottom Row: Actions (Edit & Delete) */}
+                      <div className="pt-4 mt-4 border-t border-slate-800/80 flex items-center justify-between">
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          ID: {offer.id.slice(-6)}
+                        </span>
+
+                        <div className="flex items-center space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditOffer(offer)}
+                            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white transition-colors cursor-pointer text-xs font-bold inline-flex items-center space-x-1"
+                            title="Edit Offer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Edit</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOffer(offer.id)}
+                            disabled={deletingOfferId === offer.id}
+                            className="p-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-200 border border-red-900/40 transition-colors cursor-pointer text-xs font-bold inline-flex items-center space-x-1"
+                            title="Delete Offer"
+                          >
+                            {deletingOfferId === offer.id ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* CREATE / EDIT OFFER MODAL */}
+        {isOfferModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+            <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5 animate-scale-in">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 bg-amber-500/20 text-amber-400 rounded-xl flex items-center justify-center">
+                    <Tag className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-base text-white">
+                      {editingOffer ? 'Edit Promotional Offer' : 'Create New Offer'}
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Configure customer banner and promo discount details.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsOfferModalOpen(false)}
+                  className="w-8 h-8 rounded-xl bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveOffer} className="space-y-4 text-xs">
+                {/* Field 1: Offer Title */}
                 <div>
                   <label className="block text-slate-300 font-bold mb-1.5 uppercase tracking-wider text-[11px]">
-                    Restaurant UPI ID
+                    Offer Title *
                   </label>
                   <input
                     type="text"
-                    value={paymentSettings.upiId}
-                    onChange={(e) =>
-                      setPaymentSettings({ ...paymentSettings, upiId: e.target.value })
-                    }
-                    placeholder="e.g. 7cheesepizza@okhdfcbank"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white font-mono placeholder-slate-500 outline-none focus:border-[#e31837]"
+                    value={offerForm.title}
+                    onChange={(e) => setOfferForm({ ...offerForm, title: e.target.value })}
+                    placeholder="e.g. Funday Friday or Flat ₹100 OFF"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-[#e31837]"
                     required
                   />
-                  <span className="text-[10.5px] text-slate-500 mt-1 block">
-                    Customer UPI payments will be addressed directly to this VPA ID.
-                  </span>
                 </div>
 
+                {/* Field 2: Description */}
                 <div>
                   <label className="block text-slate-300 font-bold mb-1.5 uppercase tracking-wider text-[11px]">
-                    UPI QR Code Image URL (Optional)
+                    Description *
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={offerForm.description}
+                    onChange={(e) => setOfferForm({ ...offerForm, description: e.target.value })}
+                    placeholder="e.g. Buy 1 Get 1 Free on Medium & Large Pizzas"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-[#e31837] resize-none"
+                    required
+                  />
+                </div>
+
+                {/* Field 3: Promo Code (Optional) */}
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1.5 uppercase tracking-wider text-[11px]">
+                    Promo Code (Optional)
                   </label>
                   <input
-                    type="url"
-                    value={paymentSettings.upiQrUrl}
-                    onChange={(e) =>
-                      setPaymentSettings({ ...paymentSettings, upiQrUrl: e.target.value })
-                    }
-                    placeholder="https://..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none focus:border-[#e31837]"
+                    type="text"
+                    value={offerForm.promoCode}
+                    onChange={(e) => setOfferForm({ ...offerForm, promoCode: e.target.value.toUpperCase() })}
+                    placeholder="e.g. BOGOFRIDAY or CHEESE100"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm font-mono uppercase text-amber-400 placeholder-slate-500 outline-none focus:border-[#e31837]"
                   />
-                  <span className="text-[10.5px] text-slate-500 mt-1 block">
-                    Leave blank to auto-generate a dynamic QR code based on your UPI ID.
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    If specified, customers can tap to copy and apply this coupon.
                   </span>
                 </div>
 
-                {/* QR Code Live Preview */}
-                <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 flex items-center space-x-4">
-                  <img
-                    src={
-                      paymentSettings.upiQrUrl ||
-                      `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi%3A%2F%2Fpay%3Fpa%3D${encodeURIComponent(
-                        paymentSettings.upiId || DEFAULT_PAYMENT_SETTINGS.upiId
-                      )}%26pn%3D7Cheese%2520Pizza%26cu%3DINR`
-                    }
-                    alt="UPI Preview"
-                    className="w-24 h-24 rounded-xl object-contain bg-white p-1 border border-slate-700"
-                  />
-                  <div className="space-y-1">
-                    <span className="font-extrabold text-sm text-white block">Active Customer QR Preview</span>
-                    <p className="text-[11px] text-slate-400">
-                      UPI ID: <strong className="text-emerald-400 font-mono">{paymentSettings.upiId}</strong>
-                    </p>
-                    <span className="text-[10px] text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md inline-block">
-                      ✓ Instant Settlement
+                {/* Field 4: Active / Inactive Status Toggle */}
+                <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="font-extrabold text-sm text-white block">Active on Customer UI</span>
+                    <span className="text-[11px] text-slate-400 block">
+                      When enabled, this banner appears immediately on the main ordering page.
                     </span>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setOfferForm({ ...offerForm, isActive: !offerForm.isActive })}
+                    className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer shrink-0 ${
+                      offerForm.isActive ? 'bg-emerald-600' : 'bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`w-5 h-5 rounded-full bg-white shadow-md block transition-transform ${
+                        offerForm.isActive ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
                 </div>
 
-                {paymentSaveMessage && (
-                  <div className="p-3 bg-emerald-950/50 border border-emerald-800/50 rounded-xl text-emerald-300 text-xs font-bold animate-fade-in">
-                    {paymentSaveMessage}
-                  </div>
-                )}
+                {/* Submit & Cancel buttons */}
+                <div className="pt-2 flex items-center justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsOfferModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
 
-                <button
-                  type="submit"
-                  disabled={isSavingPayment}
-                  className="w-full bg-[#e31837] hover:bg-[#c4122d] text-white font-black text-xs py-3.5 rounded-xl shadow-lg shadow-red-950/50 transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{isSavingPayment ? 'Saving Settings...' : 'Save Payment Configuration'}</span>
-                </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingOffer}
+                    className="px-6 py-2.5 rounded-xl bg-[#e31837] hover:bg-[#c4122d] text-white font-extrabold shadow-md transition-all cursor-pointer disabled:opacity-50 inline-flex items-center space-x-1.5"
+                  >
+                    {isSavingOffer ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>{editingOffer ? 'Save Changes' : 'Create Offer'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </form>
             </div>
           </div>

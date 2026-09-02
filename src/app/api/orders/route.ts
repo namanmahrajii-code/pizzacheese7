@@ -97,9 +97,11 @@ export async function POST(req: Request) {
     const resolvedOrderType: 'Delivery' | 'Dine-in' =
       orderType === 'Dine-in' || deliveryType === 'Dine-in' ? 'Dine-in' : 'Delivery';
 
-    const resolvedPaymentMethod: 'COD' | 'UPI' = paymentMethod === 'UPI' ? 'UPI' : 'COD';
+    const resolvedPaymentMethod: string =
+      paymentMethod ||
+      (resolvedOrderType === 'Dine-in' ? 'Pay at Counter' : 'Pay on Delivery');
 
-    const newOrderId = `ORD-${Math.floor(10000 + Math.random() * 90000)}`;
+    const newOrderId = body.id || body.orderId || `ORD-${Math.floor(10000 + Math.random() * 90000)}`;
 
     const newOrder = {
       id: newOrderId,
