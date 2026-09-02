@@ -83,10 +83,10 @@ export async function POST(req: Request) {
     // 1. Save to central persistent order store
     addGlobalOrder(newOrder);
 
-    // 2. Try saving order to Firestore if online
+    // 2. Try saving order to Firestore if online (non-blocking)
     try {
       if (db) {
-        await setDoc(doc(db, 'orders', newOrderId), newOrder, { merge: true });
+        setDoc(doc(db, 'orders', newOrderId), newOrder, { merge: true }).catch(() => {});
       }
     } catch (fsErr) {
       console.warn('Firestore order save fallback:', fsErr);

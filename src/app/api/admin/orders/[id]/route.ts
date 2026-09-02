@@ -35,10 +35,10 @@ export async function PATCH(
     // 1. Update in central orderStore
     const updated = updateGlobalOrder(id, { status });
 
-    // 2. Sync to Firestore if available
+    // 2. Sync to Firestore if available (non-blocking)
     try {
       if (db) {
-        await setDoc(doc(db, 'orders', id), { status }, { merge: true });
+        setDoc(doc(db, 'orders', id), { status }, { merge: true }).catch(() => {});
       }
     } catch (e) {
       console.warn('Firestore status update fallback:', e);

@@ -34,8 +34,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const isDineInRoute = pathname?.startsWith('/dine-in');
-
   const {
     items,
     updateQuantity,
@@ -58,6 +56,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
     getGrandTotal,
     getTotalCount,
   } = useCartStore();
+
+  const isDineIn = Boolean(pathname?.startsWith('/dine-in') || deliveryMode === 'Dine-in');
+  const isDineInRoute = isDineIn;
 
   const [couponInput, setCouponInput] = useState('');
   const [couponFeedback, setCouponFeedback] = useState<{ success?: boolean; message?: string } | null>(null);
@@ -248,20 +249,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
     let placedOrderId = `ORD-${Math.floor(10000 + Math.random() * 90000)}`;
 
     try {
-      // 3. Await clean addDoc Firestore request (with 2s safety race to prevent any network stall)
+      // Non-blocking Firestore save if online
       if (db) {
-        try {
-          const firestorePromise = addDoc(collection(db, 'orders'), orderPayload);
-          const timeoutPromise = new Promise<{ id: string }>((resolve) =>
-            setTimeout(() => resolve({ id: placedOrderId }), 2000)
-          );
-          const docRef = (await Promise.race([firestorePromise, timeoutPromise])) as any;
-          if (docRef?.id) {
-            placedOrderId = docRef.id;
-          }
-        } catch (fsErr) {
-          console.warn('Firestore addDoc fallback:', fsErr);
-        }
+        addDoc(collection(db, 'orders'), { ...orderPayload, id: placedOrderId }).catch(() => {});
       }
 
       const finalOrder = { ...orderPayload, id: placedOrderId };
@@ -274,18 +264,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
         console.warn('Failed to save activeOrderId to localStorage:', e);
       }
 
-      // Sync to server API store
-      try {
-        await fetch('/api/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(finalOrder),
-        });
-      } catch (err) {
-        console.warn('Order API sync error:', err);
-      }
+      // Fast non-blocking sync to server API store
+      fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalOrder),
+      }).catch((err) => console.warn('Order API sync error:', err));
 
-      triggerConfetti();
+      try {
+        triggerConfetti();
+      } catch {}
 
       // Instantly clear Zustand cart state
       clearCart();
@@ -314,7 +302,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
         )}`
       );
     } finally {
-      // Set isLoading to false in the finally block
       setIsLoading(false);
     }
   };

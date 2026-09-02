@@ -99,8 +99,19 @@ export default function AdminPage() {
   const [ordersStream, setOrdersStream] = useState<'dine-in' | 'delivery'>('dine-in');
   const [orderSubFilter, setOrderSubFilter] = useState<'All' | 'Pending' | 'Preparing' | 'Dispatched' | 'Delivered'>('All');
 
-  // Orders State
-  const [orders, setOrders] = useState<OrderData[]>([]);
+  // Orders State (initialized immediately from cache so screen never blinks empty on refresh)
+  const [orders, setOrders] = useState<OrderData[]>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem('7cheese_admin_persisted_orders');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    } catch {}
+    return [];
+  });
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [isResettingOrders, setIsResettingOrders] = useState(false);
@@ -305,9 +316,7 @@ export default function AdminPage() {
   };
 
   const handleStatusChange = async (orderId: string, newStatus: OrderData['status']) => {
-    setUpdatingOrderId(orderId);
-
-    // 1. Optimistic UI update and localStorage cache update
+    // 1. Instant optimistic UI update and localStorage cache update
     setOrders((prev) => {
       const updated = prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
       try {
@@ -316,31 +325,29 @@ export default function AdminPage() {
       return updated;
     });
 
+    // 2. Clear updating spinner in 200ms so subsequent status buttons are immediately clickable!
+    setUpdatingOrderId(orderId);
+    setTimeout(() => setUpdatingOrderId(null), 200);
+
+    // 3. Fast non-blocking background sync to Admin API, Customer API, and Firestore
     try {
-      // 2. Update Admin server API store
-      await fetch(`/api/admin/orders/${orderId}`, {
+      fetch(`/api/admin/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
-      });
+      }).catch(() => {});
 
-      // 3. Update customer order API route directly
       fetch(`/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       }).catch(() => {});
 
-      // 4. Sync to Firestore if available
-      try {
-        if (db) {
-          setDoc(doc(db, 'orders', orderId), { status: newStatus }, { merge: true }).catch(() => {});
-        }
-      } catch {}
+      if (db) {
+        setDoc(doc(db, 'orders', orderId), { status: newStatus }, { merge: true }).catch(() => {});
+      }
     } catch (err) {
-      console.error('Failed to update status:', err);
-    } finally {
-      setUpdatingOrderId(null);
+      console.error('Failed to update status in background:', err);
     }
   };
 
