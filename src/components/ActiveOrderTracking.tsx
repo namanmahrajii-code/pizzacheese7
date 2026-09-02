@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import {
@@ -19,6 +19,7 @@ import {
   RefreshCw,
   ShoppingBag,
   Sparkles,
+  ArrowLeft,
 } from 'lucide-react';
 import { STORE_LOCATION } from '@/lib/constants';
 
@@ -37,6 +38,7 @@ interface RecoveredOrder {
   orderType?: 'Delivery' | 'Dine-in' | string;
   tableNumber?: string | null;
   address?: string | null;
+  deliveryAddress?: string | null;
   totalAmount?: number;
   items?: OrderItem[];
   paymentMethod?: string;
@@ -54,14 +56,43 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
   onBackToMenu,
   onOrderFinished,
 }) => {
-  const [order, setOrder] = useState<RecoveredOrder | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Read instant cached order data from localStorage so there is ZERO initial loading lag
+  const [order, setOrder] = useState<RecoveredOrder | null>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem('activeOrderData');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && (parsed.id === orderId || !orderId)) {
+            return parsed;
+          }
+        }
+      }
+    } catch {}
+    return null;
+  });
+
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem('activeOrderData');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && (parsed.id === orderId || !orderId)) {
+            return false; // Instant ready!
+          }
+        }
+      }
+    } catch {}
+    return true;
+  });
+
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Firestore real-time onSnapshot listener
+  // Poll server API every 3s to guarantee live updates even if Firestore websockets are offline
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
     let isMounted = true;
 
     if (!orderId) {
@@ -69,95 +100,92 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
       return;
     }
 
+    const checkOrderAPI = async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.order && isMounted) {
+            setOrder(data.order);
+            setIsLoading(false);
+            setErrorStatus(null);
+
+            // If finalized, clean localStorage
+            if (['Delivered', 'Completed', 'Cancelled'].includes(data.order.status)) {
+              try {
+                localStorage.removeItem('activeOrderId');
+                localStorage.removeItem('activeOrderData');
+              } catch {}
+            }
+            return true;
+          }
+        }
+      } catch (err) {
+        // API poll error
+      }
+      return false;
+    };
+
+    // Immediate check
+    checkOrderAPI();
+
+    // Safety timeout: never stay in loading state for more than 1.5 seconds
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) {
+        setIsLoading(false);
+      }
+    }, 1500);
+
+    // Poll every 3 seconds
+    pollIntervalRef.current = setInterval(checkOrderAPI, 3000);
+
+    // Firestore onSnapshot listener
+    let unsubscribeFirestore: (() => void) | undefined;
     try {
       if (db) {
         const orderRef = doc(db, 'orders', orderId);
-        unsubscribe = onSnapshot(
+        unsubscribeFirestore = onSnapshot(
           orderRef,
           (snapshot) => {
             if (!isMounted) return;
-            setIsLoading(false);
+            if (snapshot.exists()) {
+              const data = snapshot.data();
+              const fsOrder: RecoveredOrder = {
+                id: snapshot.id,
+                status: data.status || 'Pending',
+                orderType: data.orderType || 'Delivery',
+                tableNumber: data.tableNumber || null,
+                address: data.address || data.deliveryAddress || null,
+                deliveryAddress: data.deliveryAddress || data.address || null,
+                totalAmount: data.totalAmount || 0,
+                items: data.items || [],
+                paymentMethod: data.paymentMethod || 'Cash / UPI on Delivery',
+                createdAt: data.createdAt || new Date().toISOString(),
+              };
+              setOrder(fsOrder);
+              setIsLoading(false);
 
-            if (!snapshot.exists()) {
-              // Document not found in Firestore
-              setErrorStatus('Order document not found or removed');
-              try {
-                localStorage.removeItem('activeOrderId');
-              } catch (e) {}
-              return;
-            }
-
-            const data = snapshot.data();
-            const fetchedOrder: RecoveredOrder = {
-              id: snapshot.id,
-              status: data.status || 'Pending',
-              orderType: data.orderType || 'Delivery',
-              tableNumber: data.tableNumber || null,
-              address: data.address || null,
-              totalAmount: data.totalAmount || 0,
-              items: data.items || [],
-              paymentMethod: data.paymentMethod || 'Cash / UPI on Delivery',
-              createdAt: data.createdAt || new Date().toISOString(),
-            };
-
-            setOrder(fetchedOrder);
-
-            // Cleanup Mechanism:
-            // If the status updates to 'Delivered', 'Completed', or 'Cancelled',
-            // display the final status to the user and automatically clear localStorage.
-            const terminalStatuses = ['Delivered', 'Completed', 'Cancelled'];
-            if (terminalStatuses.includes(fetchedOrder.status)) {
-              try {
-                localStorage.removeItem('activeOrderId');
-              } catch (e) {
-                console.warn('Failed to clear activeOrderId from localStorage:', e);
+              if (['Delivered', 'Completed', 'Cancelled'].includes(fsOrder.status)) {
+                try {
+                  localStorage.removeItem('activeOrderId');
+                  localStorage.removeItem('activeOrderData');
+                } catch {}
               }
             }
           },
           (err) => {
-            console.warn('Firestore onSnapshot listener error:', err);
-            // Fallback to REST API fetch
-            fetch(`/api/admin/orders/${orderId}`)
-              .then((res) => res.json())
-              .then((data) => {
-                if (!isMounted) return;
-                setIsLoading(false);
-                if (data.order) {
-                  setOrder(data.order);
-                  if (['Delivered', 'Completed', 'Cancelled'].includes(data.order.status)) {
-                    try {
-                      localStorage.removeItem('activeOrderId');
-                    } catch (e) {}
-                  }
-                } else {
-                  setErrorStatus('Order not found');
-                  try {
-                    localStorage.removeItem('activeOrderId');
-                  } catch (e) {}
-                }
-              })
-              .catch(() => {
-                if (isMounted) {
-                  setIsLoading(false);
-                  setErrorStatus('Unable to connect to order tracking');
-                  try {
-                    localStorage.removeItem('activeOrderId');
-                  } catch (e) {}
-                }
-              });
+            // Firestore offline / disabled fallback
+            console.warn('Firestore real-time listener note:', err.message);
           }
         );
       }
-    } catch (err) {
-      console.warn('Error setting up onSnapshot:', err);
-      setIsLoading(false);
-    }
+    } catch {}
 
     return () => {
       isMounted = false;
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      clearTimeout(safetyTimer);
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (unsubscribeFirestore) unsubscribeFirestore();
     };
   }, [orderId]);
 
@@ -170,7 +198,8 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
   const handleDismissOrder = () => {
     try {
       localStorage.removeItem('activeOrderId');
-    } catch (e) {}
+      localStorage.removeItem('activeOrderData');
+    } catch {}
     onOrderFinished();
   };
 
@@ -221,30 +250,36 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
     },
   ];
 
-  if (isLoading) {
+  if (isLoading && !order) {
     return (
       <div className="min-h-screen bg-[#f4f6f8] flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-xl text-center space-y-4">
           <div className="w-14 h-14 bg-red-100 text-[#e31837] rounded-full flex items-center justify-center mx-auto animate-spin">
             <RefreshCw className="w-6 h-6" />
           </div>
-          <h2 className="text-base font-black text-gray-900">Recovering Active Order...</h2>
+          <h2 className="text-base font-black text-gray-900">Connecting to Order Tracker...</h2>
           <p className="text-xs text-gray-500">
-            Checking real-time live status for order #{orderId}
+            Fetching real-time status for order #{orderId}
           </p>
+          <button
+            onClick={onBackToMenu}
+            className="text-xs text-[#002855] font-bold underline cursor-pointer pt-2"
+          >
+            Skip to Menu
+          </button>
         </div>
       </div>
     );
   }
 
-  if (errorStatus || !order) {
+  if (errorStatus && !order) {
     return (
       <div className="min-h-screen bg-[#f4f6f8] flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-xl text-center space-y-4 animate-scale-in">
           <div className="w-14 h-14 bg-slate-100 text-slate-500 rounded-full flex items-center justify-center mx-auto text-2xl">
             📦
           </div>
-          <h2 className="text-lg font-black text-gray-900">Order Completed or Not Found</h2>
+          <h2 className="text-lg font-black text-gray-900">Order Finalized or Not Found</h2>
           <p className="text-xs text-gray-500 leading-relaxed">
             {errorStatus || 'This order has already been finalized or removed. You are free to place a new order!'}
           </p>
@@ -252,12 +287,17 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
             onClick={handleDismissOrder}
             className="w-full bg-[#002855] hover:bg-[#001c3d] text-white font-extrabold text-xs py-3.5 rounded-2xl shadow-md transition-all cursor-pointer"
           >
-            Start New Order / Return to Menu
+            Return to Menu / Start New Order
           </button>
         </div>
       </div>
     );
   }
+
+  const destinationText =
+    order?.orderType === 'Dine-in'
+      ? `Dine-in Service • Table ${order?.tableNumber || 'General'}`
+      : order?.deliveryAddress || order?.address || 'Kaladhungi Road, Haldwani';
 
   return (
     <div className="min-h-screen bg-[#f4f6f8] text-gray-900 pb-20">
@@ -266,6 +306,14 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
         <div>
           <header className="bg-gradient-to-r from-[#002855] to-[#093566] text-white px-5 py-4 flex items-center justify-between shadow-md">
             <div className="flex items-center space-x-2.5">
+              <button
+                type="button"
+                onClick={onBackToMenu}
+                className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors cursor-pointer mr-1"
+                title="Back to Menu"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
               <div className="w-9 h-9 bg-[#e31837] rounded-xl flex items-center justify-center text-xl shadow-md">
                 🧀
               </div>
@@ -288,11 +336,23 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
             </div>
           </header>
 
+          {/* Navigation link to browse menu */}
+          <div className="bg-slate-100 px-4 py-2 flex items-center justify-between border-b border-gray-200 text-xs">
+            <span className="text-[11px] text-gray-600 font-medium">Want to add more slices?</span>
+            <button
+              onClick={onBackToMenu}
+              className="text-[#002855] font-black hover:underline inline-flex items-center space-x-1 cursor-pointer"
+            >
+              <span>Browse Menu</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Main Body */}
           <main className="p-4 space-y-4">
             {/* Status Announcement Banner */}
             {isCancelled ? (
-              <div className="bg-red-50 border border-red-200 rounded-3xl p-5 text-center space-y-2">
+              <div className="bg-red-50 border border-red-200 rounded-3xl p-5 text-center space-y-2 animate-scale-in">
                 <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-xl font-black">
                   ✕
                 </div>
@@ -301,8 +361,8 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
                   This order was cancelled. Your storage has been cleared so you can place a new order.
                 </p>
               </div>
-            ) : order.status === 'Delivered' || order.status === 'Completed' ? (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 text-center space-y-2">
+            ) : order?.status === 'Delivered' || order?.status === 'Completed' ? (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 text-center space-y-2 animate-scale-in">
                 <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-xl">
                   🎉
                 </div>
@@ -312,20 +372,20 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
                 </p>
               </div>
             ) : (
-              <div className="bg-gradient-to-r from-red-50 to-amber-50 border border-red-100 rounded-3xl p-5 space-y-3">
+              <div className="bg-gradient-to-r from-red-50 to-amber-50 border border-red-100 rounded-3xl p-5 space-y-3 shadow-xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <span className="text-2xl">🍕</span>
                     <div>
                       <h2 className="text-sm font-black text-gray-900 leading-tight">
-                        {order.status === 'Pending' && 'Order Confirmed by Store'}
-                        {order.status === 'Preparing' && 'Freshly Baking in Oven'}
-                        {order.status === 'Dispatched' && (isDineIn ? 'Serving to Table' : 'Out for Delivery')}
+                        {order?.status === 'Pending' && 'Order Confirmed & Sent to Kitchen'}
+                        {order?.status === 'Preparing' && 'Freshly Baking in Stone Deck Oven'}
+                        {order?.status === 'Dispatched' && (isDineIn ? 'Serving to Table' : 'Out for Delivery')}
                       </h2>
                       <p className="text-[11px] text-gray-500 font-medium mt-0.5">
-                        {order.status === 'Pending' && 'Kitchen preparing ingredients & stone deck oven'}
-                        {order.status === 'Preparing' && 'Toppings loaded with 100% real dairy mozzarella'}
-                        {order.status === 'Dispatched' && (isDineIn ? 'Server heading to your table' : 'Delivery rider en route to your doorstep')}
+                        {order?.status === 'Pending' && 'Kitchen accepted your order and is rolling fresh dough'}
+                        {order?.status === 'Preparing' && 'Loaded with 100% real dairy mozzarella and baking'}
+                        {order?.status === 'Dispatched' && (isDineIn ? 'Server is bringing order to your table' : 'Delivery rider en route to your doorstep')}
                       </p>
                     </div>
                   </div>
@@ -334,10 +394,10 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
                 <div className="flex items-center justify-between pt-1 text-xs">
                   <span className="inline-flex items-center space-x-1 font-bold text-amber-900 bg-amber-100/70 border border-amber-200 px-2.5 py-1 rounded-xl">
                     <Clock className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Est. arrival in {order.status === 'Dispatched' ? '10-15' : '20-30'} mins</span>
+                    <span>Est. arrival in {order?.status === 'Dispatched' ? '10-15' : '20-30'} mins</span>
                   </span>
                   <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                    {order.orderType}
+                    {order?.orderType || 'Delivery'}
                   </span>
                 </div>
               </div>
@@ -346,14 +406,19 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
             {/* Step Progress Tracker (for active orders) */}
             {!isCancelled && (
               <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-xs space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-wider text-gray-400">
-                  Live Preparation Timeline
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-gray-400">
+                    Live Preparation Timeline
+                  </h3>
+                  <span className="text-[10px] text-slate-400 font-mono">Auto-syncs live</span>
+                </div>
 
                 <div className="space-y-4">
                   {steps.map((step, idx) => {
                     const stepNum = idx + 1;
-                    const isCompleted = stepNum < currentStep || (stepNum === 4 && (order.status === 'Delivered' || order.status === 'Completed'));
+                    const isCompleted =
+                      stepNum < currentStep ||
+                      (stepNum === 4 && (order?.status === 'Delivered' || order?.status === 'Completed'));
                     const isCurrent = stepNum === currentStep && !isTerminal;
                     const Icon = step.icon;
 
@@ -395,8 +460,8 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
                               {step.title}
                             </h4>
                             {isCurrent && (
-                              <span className="bg-red-50 text-[#e31837] text-[10px] font-black px-2 py-0.5 rounded-full border border-red-200">
-                                In Progress
+                              <span className="bg-red-50 text-[#e31837] text-[10px] font-black px-2 py-0.5 rounded-full border border-red-200 animate-pulse">
+                                In Oven
                               </span>
                             )}
                           </div>
@@ -420,7 +485,7 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
                   </span>
                   <div className="flex items-center space-x-1.5 mt-0.5">
                     <span className="font-mono font-black text-sm text-gray-900">
-                      #{order.id}
+                      #{order?.id || orderId}
                     </span>
                     <button
                       type="button"
@@ -439,10 +504,10 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
 
                 <div className="text-right">
                   <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block">
-                    Mode
+                    Order Type
                   </span>
                   <span className="font-black text-xs text-gray-800">
-                    {order.orderType === 'Dine-in' ? `Table ${order.tableNumber || 'General'}` : 'Delivery'}
+                    {order?.orderType === 'Dine-in' ? `Table ${order.tableNumber || 'General'}` : 'Delivery'}
                   </span>
                 </div>
               </div>
@@ -450,15 +515,11 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
               {/* Destination Address or Table */}
               <div className="text-xs text-gray-600 flex items-start space-x-2 bg-gray-50 p-2.5 rounded-xl">
                 <MapPin className="w-3.5 h-3.5 text-[#e31837] shrink-0 mt-0.5" />
-                <span className="truncate">
-                  {order.orderType === 'Dine-in'
-                    ? `Dine-in Service • Table ${order.tableNumber || 'General'}`
-                    : order.address || 'Haldwani, Uttarakhand'}
-                </span>
+                <span className="truncate">{destinationText}</span>
               </div>
 
               {/* Items List */}
-              {order.items && order.items.length > 0 && (
+              {order?.items && order.items.length > 0 && (
                 <div className="space-y-2 pt-1 border-t border-gray-100">
                   <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block">
                     Items ({order.items.length})
@@ -489,7 +550,7 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
                     Payment Mode
                   </span>
                   <span className="text-xs font-black text-gray-700">
-                    {order.paymentMethod || 'Cash / UPI on Delivery'}
+                    {order?.paymentMethod || 'Cash / UPI on Delivery'}
                   </span>
                 </div>
                 <div className="text-right">
@@ -497,7 +558,7 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
                     Total Amount
                   </span>
                   <span className="text-base font-black text-[#e31837] font-mono">
-                    ₹{order.totalAmount}
+                    ₹{order?.totalAmount || 0}
                   </span>
                 </div>
               </div>
@@ -514,7 +575,7 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
               </div>
 
               <a
-                href={`https://wa.me/919876543210?text=${encodeURIComponent(`Hi 7Cheese, checking status of my order #${order.id}`)}`}
+                href={`https://wa.me/919876543210?text=${encodeURIComponent(`Hi 7Cheese, checking status of my order #${order?.id || orderId}`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-[#002855] text-white font-extrabold text-[11px] px-3 py-1.5 rounded-xl shadow-xs hover:bg-[#001c3d] transition-colors"

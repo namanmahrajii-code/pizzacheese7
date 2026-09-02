@@ -169,20 +169,28 @@ function ThankYouContent() {
           {/* Action Buttons */}
           <div className="space-y-2.5 pt-2">
             <Link
-              href={isDineIn ? '/dine-in' : '/'}
+              href={isDineIn ? `/dine-in?table=${encodeURIComponent(tableNumber || '')}` : '/'}
               className="w-full bg-[#e31837] hover:bg-[#c4122d] active:scale-[0.99] text-white font-black text-sm py-3.5 rounded-xl shadow-lg shadow-red-950/50 flex items-center justify-center space-x-2 transition-all cursor-pointer"
             >
-              <span>Order More Cheesy Pizzas</span>
+              <Clock className="w-4 h-4" />
+              <span>Track Live Order Status</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
 
-            <Link
-              href={isDineIn ? `/dine-in?table=${encodeURIComponent(tableNumber || '')}` : '/'}
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  localStorage.removeItem('activeOrderId');
+                  localStorage.removeItem('activeOrderData');
+                } catch {}
+                router.push(isDineIn ? `/dine-in?table=${encodeURIComponent(tableNumber || '')}` : '/');
+              }}
               className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs py-3 rounded-xl flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
             >
               <Home className="w-3.5 h-3.5" />
-              <span>Return to Menu</span>
-            </Link>
+              <span>Order More Cheesy Pizzas / Return to Menu</span>
+            </button>
           </div>
         </div>
       </main>

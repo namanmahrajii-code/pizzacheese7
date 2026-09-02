@@ -48,6 +48,8 @@ import {
 } from 'lucide-react';
 import { STORE_LOCATION, DEFAULT_PAYMENT_SETTINGS } from '@/lib/constants';
 import { ProductItem, CategoryItem, OfferItem } from '@/lib/data';
+import { db } from '@/lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 interface OrderItemData {
   id: string;
@@ -163,9 +165,44 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/admin/orders');
       const data = await res.json();
-      if (data.orders) setOrders(data.orders);
+      if (data.orders && Array.isArray(data.orders)) {
+        let merged = data.orders;
+        try {
+          const cached = localStorage.getItem('7cheese_admin_persisted_orders');
+          if (cached) {
+            const parsedCached: OrderData[] = JSON.parse(cached);
+            if (Array.isArray(parsedCached) && parsedCached.length > 0) {
+              const map = new Map<string, OrderData>();
+              parsedCached.forEach((o) => map.set(o.id, o));
+              data.orders.forEach((o: OrderData) => map.set(o.id, o));
+              merged = Array.from(map.values()).sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              );
+              if (parsedCached.length > data.orders.length) {
+                fetch('/api/admin/orders', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ orders: merged }),
+                }).catch(() => {});
+              }
+            }
+          }
+        } catch {}
+
+        setOrders(merged);
+        try {
+          localStorage.setItem('7cheese_admin_persisted_orders', JSON.stringify(merged));
+        } catch {}
+      }
     } catch (e) {
       console.error('Failed to fetch orders:', e);
+      try {
+        const cached = localStorage.getItem('7cheese_admin_persisted_orders');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) setOrders(parsed);
+        }
+      } catch {}
     } finally {
       setIsLoadingOrders(false);
     }
@@ -268,18 +305,37 @@ export default function AdminPage() {
 
   const handleStatusChange = async (orderId: string, newStatus: OrderData['status']) => {
     setUpdatingOrderId(orderId);
+
+    // 1. Optimistic UI update and localStorage cache update
+    setOrders((prev) => {
+      const updated = prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
+      try {
+        localStorage.setItem('7cheese_admin_persisted_orders', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
     try {
-      const res = await fetch(`/api/admin/orders/${orderId}`, {
+      // 2. Update Admin server API store
+      await fetch(`/api/admin/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
 
-      if (res.ok) {
-        setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-        );
-      }
+      // 3. Update customer order API route directly
+      fetch(`/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      }).catch(() => {});
+
+      // 4. Sync to Firestore if available
+      try {
+        if (db) {
+          setDoc(doc(db, 'orders', orderId), { status: newStatus }, { merge: true }).catch(() => {});
+        }
+      } catch {}
     } catch (err) {
       console.error('Failed to update status:', err);
     } finally {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { getOrderById, updateGlobalOrder } from '@/lib/orderStore';
 
 export async function GET(
@@ -9,11 +9,27 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+
+    // 1. Check central orderStore
     const order = getOrderById(id);
-    if (!order) {
-      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    if (order) {
+      return NextResponse.json({ success: true, order });
     }
-    return NextResponse.json({ success: true, order });
+
+    // 2. Check Firestore
+    try {
+      if (db) {
+        const snap = await getDoc(doc(db, 'orders', id));
+        if (snap.exists()) {
+          const fsOrder = { id: snap.id, ...snap.data() };
+          return NextResponse.json({ success: true, order: fsOrder });
+        }
+      }
+    } catch (fsErr) {
+      console.warn('Firestore single order query fallback:', fsErr);
+    }
+
+    return NextResponse.json({ error: 'Order not found' }, { status: 404 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error fetching order' }, { status: 500 });
   }
@@ -32,16 +48,15 @@ export async function PATCH(
       return NextResponse.json({ error: 'Status is required' }, { status: 400 });
     }
 
-    // 1. Update in central orderStore
     const updated = updateGlobalOrder(id, { status });
 
-    // 2. Sync to Firestore if available
+    // Sync to Firestore
     try {
       if (db) {
         await setDoc(doc(db, 'orders', id), { status }, { merge: true });
       }
-    } catch (e) {
-      console.warn('Firestore status update fallback:', e);
+    } catch (fsErr) {
+      console.warn('Firestore status update fallback:', fsErr);
     }
 
     return NextResponse.json({
@@ -50,10 +65,7 @@ export async function PATCH(
       status,
       order: updated,
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || 'Failed to update order status' },
-      { status: 500 }
-    );
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Failed to update order' }, { status: 500 });
   }
 }

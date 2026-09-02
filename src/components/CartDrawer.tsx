@@ -264,19 +264,26 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
         }
       }
 
-      // Immediately save newly created document ID to localStorage for guest order recovery
+      const finalOrder = { ...orderPayload, id: placedOrderId };
+
+      // Immediately save newly created document ID and full order data to localStorage
       try {
         localStorage.setItem('activeOrderId', placedOrderId);
+        localStorage.setItem('activeOrderData', JSON.stringify(finalOrder));
       } catch (e) {
         console.warn('Failed to save activeOrderId to localStorage:', e);
       }
 
-      // Non-blocking fire-and-forget sync to server in-memory list
-      fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...orderPayload, id: placedOrderId }),
-      }).catch((err) => console.warn('Order API sync error:', err));
+      // Sync to server API store
+      try {
+        await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(finalOrder),
+        });
+      } catch (err) {
+        console.warn('Order API sync error:', err);
+      }
 
       triggerConfetti();
 
