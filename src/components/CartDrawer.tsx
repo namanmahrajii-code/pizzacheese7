@@ -86,6 +86,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
     locationAddress: globalAddress,
     isLocating: globalIsLocating,
     locationStatus: globalLocationStatus,
+    errorMessage: globalLocationError,
+    requestLocation,
   } = useLocation();
 
   // HTML5 Geolocation State (Only used for Delivery)
@@ -597,8 +599,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
                         />
                       </div>
 
-                      {/* Verified Non-Editable GPS Exact Location (Captured on Site Opening) */}
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 space-y-1">
+                      {/* Verified Non-Editable GPS Exact Location */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 space-y-1.5">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-1.5 text-xs font-black text-slate-800">
                             <Navigation className="w-3.5 h-3.5 text-[#002855]" />
@@ -615,13 +617,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
                               <span>Detecting...</span>
                             </span>
                           ) : (
-                            <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                              Manual Entry
-                            </span>
+                            <button
+                              type="button"
+                              onClick={requestLocation}
+                              disabled={globalIsLocating}
+                              className="inline-flex items-center space-x-1 text-[10.5px] font-extrabold px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-[#e31837] border border-red-200 transition-all cursor-pointer shadow-2xs"
+                              title="Enable exact GPS coordinates"
+                            >
+                              <span>📍</span>
+                              <span>Fetch Exact GPS</span>
+                            </button>
                           )}
                         </div>
 
-                        {/* Non-Editable GPS Coordinates & Address Display */}
+                        {/* GPS Coordinates & Address Display */}
                         <div className="bg-white border border-slate-200 rounded-lg p-2 text-[11px] select-all">
                           {coordinates ? (
                             <div className="space-y-0.5">
@@ -642,9 +651,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
                               </div>
                             </div>
                           ) : (
-                            <p className="text-slate-500 italic text-[10.5px]">
-                              Location permission was skipped. Delivery will follow the address typed below.
-                            </p>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-slate-500 text-[10.5px]">
+                                Location not detected yet. Click &apos;Fetch Exact GPS&apos; or fill manual address below.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={requestLocation}
+                                className="text-[10px] text-blue-600 hover:text-blue-800 underline font-bold shrink-0 cursor-pointer"
+                              >
+                                Try Again
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
