@@ -103,6 +103,7 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [isResettingOrders, setIsResettingOrders] = useState(false);
 
   // Menu Management State
   const [products, setProducts] = useState<ProductItem[]>([]);
@@ -340,6 +341,27 @@ export default function AdminPage() {
       console.error('Failed to update status:', err);
     } finally {
       setUpdatingOrderId(null);
+    }
+  };
+
+  // Reset All Orders (Clear test orders & live POS board)
+  const handleResetAllOrders = async () => {
+    const confirmReset = window.confirm(
+      '⚠️ Are you sure you want to RESET ALL ORDERS?\n\nThis will permanently clear all active dine-in, delivery tickets, and test orders from the POS dashboard.'
+    );
+    if (!confirmReset) return;
+
+    setIsResettingOrders(true);
+    try {
+      await fetch('/api/admin/orders', { method: 'DELETE' });
+      setOrders([]);
+      try {
+        localStorage.removeItem('7cheese_admin_persisted_orders');
+      } catch {}
+    } catch (err) {
+      console.error('Failed to reset orders:', err);
+    } finally {
+      setIsResettingOrders(false);
     }
   };
 
@@ -1012,6 +1034,16 @@ _Please deliver hot & cheesy!_`;
           </button>
 
           <button
+            onClick={handleResetAllOrders}
+            disabled={isResettingOrders || orders.length === 0}
+            className="flex items-center space-x-1.5 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 hover:text-white px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs disabled:opacity-40"
+            title="Reset All Orders"
+          >
+            <Trash2 className={`w-3.5 h-3.5 ${isResettingOrders ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Reset Orders</span>
+          </button>
+
+          <button
             onClick={handleLogout}
             className="flex items-center space-x-1.5 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
           >
@@ -1134,41 +1166,54 @@ _Please deliver hot & cheesy!_`;
               </div>
             </div>
 
-            {/* Sub-status filter chips */}
-            <div className="flex items-center space-x-2 overflow-x-auto pb-1 no-scrollbar">
-              {(
-                [
-                  { key: 'All', label: 'All Orders' },
-                  { key: 'Pending', label: 'New' },
-                  { key: 'Preparing', label: 'Preparing' },
-                  { key: 'Dispatched', label: 'Ready' },
-                  { key: 'Delivered', label: 'Completed' },
-                ] as const
-              ).map((chip) => {
-                const count = subFilterCounts[chip.key];
-                const isActive = orderSubFilter === chip.key;
+            {/* Sub-status filter chips & Reset button */}
+            <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 no-scrollbar">
+              <div className="flex items-center space-x-2 shrink-0">
+                {(
+                  [
+                    { key: 'All', label: 'All Orders' },
+                    { key: 'Pending', label: 'New' },
+                    { key: 'Preparing', label: 'Preparing' },
+                    { key: 'Dispatched', label: 'Ready' },
+                    { key: 'Delivered', label: 'Completed' },
+                  ] as const
+                ).map((chip) => {
+                  const count = subFilterCounts[chip.key];
+                  const isActive = orderSubFilter === chip.key;
 
-                return (
-                  <button
-                    key={chip.key}
-                    onClick={() => setOrderSubFilter(chip.key)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all shrink-0 flex items-center space-x-1.5 cursor-pointer ${
-                      isActive
-                        ? 'bg-white text-slate-950 shadow-md font-black'
-                        : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <span>{chip.label}</span>
-                    <span
-                      className={`text-[10px] font-black px-1.5 py-0.2 rounded-md ${
-                        isActive ? 'bg-slate-200 text-slate-900' : 'bg-slate-800 text-slate-400'
+                  return (
+                    <button
+                      key={chip.key}
+                      onClick={() => setOrderSubFilter(chip.key)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all shrink-0 flex items-center space-x-1.5 cursor-pointer ${
+                        isActive
+                          ? 'bg-white text-slate-950 shadow-md font-black'
+                          : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
+                      <span>{chip.label}</span>
+                      <span
+                        className={`text-[10px] font-black px-1.5 py-0.2 rounded-md ${
+                          isActive ? 'bg-slate-200 text-slate-900' : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetAllOrders}
+                disabled={isResettingOrders || orders.length === 0}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold text-red-400 hover:text-white bg-red-950/40 hover:bg-red-900/60 border border-red-900/40 transition-all shrink-0 flex items-center space-x-1.5 cursor-pointer disabled:opacity-30"
+                title="Reset/Clear all live and completed orders"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Reset Orders</span>
+              </button>
             </div>
 
             {/* Order Cards Grid */}
@@ -1395,6 +1440,40 @@ _Please deliver hot & cheesy!_`;
                 })}
               </div>
             )}
+
+            {/* Separate Dedicated Section: Reset POS Orders */}
+            <div className="bg-slate-900/90 border border-red-950/60 rounded-3xl p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-red-500/15 text-red-400 border border-red-500/30 flex items-center justify-center text-xl shrink-0">
+                  🗑️
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-white">Reset POS Orders & Clear Board</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Permanently wipe all dine-in, delivery tickets, and test orders from this terminal.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetAllOrders}
+                disabled={isResettingOrders || orders.length === 0}
+                className="px-4 py-2.5 rounded-2xl text-xs font-black text-white bg-red-600 hover:bg-red-700 shadow-md transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-40 shrink-0"
+              >
+                {isResettingOrders ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Resetting Orders...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Reset All Orders ({orders.length})</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         )}
 
