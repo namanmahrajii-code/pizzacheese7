@@ -6,6 +6,8 @@ import { useCartStore } from '@/store/cartStore';
 import { STORE_LOCATION } from '@/lib/constants';
 import { usePathname } from 'next/navigation';
 
+import { useLocation } from '@/context/LocationContext';
+
 interface HeaderProps {
   onSearchChange?: (query: string) => void;
   onOpenProfile?: () => void;
@@ -15,6 +17,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, onOpenProfile })
   const pathname = usePathname();
   const isDineInRoute = pathname?.startsWith('/dine-in');
   const { setDeliveryMode } = useCartStore();
+  const { coordinates, locationAddress, isLocating, locationStatus, requestLocation } = useLocation();
 
   const [showSearch, setShowSearch] = useState(false);
   const [searchVal, setSearchVal] = useState('');
@@ -42,29 +45,35 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, onOpenProfile })
             {isDineInRoute ? (
               <UtensilsCrossed className="w-3.5 h-3.5 text-amber-400" />
             ) : (
-              <MapPin className="w-3.5 h-3.5 text-red-400" />
+              <MapPin className={`w-3.5 h-3.5 ${coordinates ? 'text-emerald-400' : 'text-red-400'}`} />
             )}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center space-x-1.5">
               <span className="font-extrabold text-xs tracking-tight text-white truncate">
-                {STORE_LOCATION.name}
+                {isDineInRoute
+                  ? STORE_LOCATION.name
+                  : (coordinates ? 'DELIVERING TO' : STORE_LOCATION.name)}
               </span>
               <span
                 className={`text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wide uppercase ${
                   isDineInRoute
                     ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
+                    : coordinates
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                     : 'bg-red-500/20 text-red-300'
                 }`}
               >
-                {isDineInRoute ? 'DINE-IN QR' : STORE_LOCATION.city}
+                {isDineInRoute ? 'DINE-IN QR' : coordinates ? 'GPS LOCKED' : STORE_LOCATION.city}
               </span>
             </div>
             <p
               className="text-[10.5px] text-gray-300 truncate leading-tight font-normal"
-              title={STORE_LOCATION.fullAddress}
+              title={!isDineInRoute && locationAddress ? locationAddress : STORE_LOCATION.fullAddress}
             >
-              Kaladhungi Road, Unchapul, Near TVS Showroom, Haldwani 263139
+              {!isDineInRoute && locationAddress
+                ? locationAddress
+                : 'Kaladhungi Road, Unchapul, Near TVS Showroom, Haldwani 263139'}
             </p>
           </div>
         </div>

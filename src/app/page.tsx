@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import Header from '@/components/Header';
+import LocationBanner from '@/components/LocationBanner';
 import OffersBanner from '@/components/OffersBanner';
 import BannerCarousel from '@/components/BannerCarousel';
 import CategoryScroll from '@/components/CategoryScroll';
@@ -169,6 +170,9 @@ function HomeContent() {
           onSearchChange={(q) => setSearchQuery(q)}
           onOpenProfile={() => setIsCartOpen(true)}
         />
+
+        {/* Real-time GPS Detection & Delivery Area Strip */}
+        <LocationBanner />
 
         {/* Dynamic Live Offers & Promos Banner */}
         <OffersBanner onApplyCoupon={() => setIsCartOpen(true)} />

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { LocationProvider } from "@/context/LocationContext";
 
 export const metadata: Metadata = {
   title: "7Cheese Pizza | Order Hot & Cheesy Pizzas Online",
@@ -25,7 +26,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased bg-[#f4f6f8] selection:bg-[#e31837] selection:text-white">
-        {children}
+        <LocationProvider>{children}</LocationProvider>
       </body>
     </html>
   );

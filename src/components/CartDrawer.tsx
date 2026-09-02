@@ -17,8 +17,10 @@ import {
   Sparkles,
   CreditCard,
   Check,
+  Navigation,
 } from 'lucide-react';
 import { useCartStore } from '@/store/cartStore';
+import { useLocation } from '@/context/LocationContext';
 import VegNonVegIcon from './VegNonVegIcon';
 import confetti from 'canvas-confetti';
 import { db } from '@/lib/firebase';
@@ -78,11 +80,23 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
   const urlTable = searchParams?.get('table') || '';
   const [tableNum, setTableNum] = useState(urlTable || tableNumber || '');
 
+  // Global Site Location Context (Captured automatically on site opening)
+  const {
+    coordinates: globalCoords,
+    locationAddress: globalAddress,
+    isLocating: globalIsLocating,
+    locationStatus: globalLocationStatus,
+  } = useLocation();
+
   // HTML5 Geolocation State (Only used for Delivery)
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
-  const [isLocating, setIsLocating] = useState(false);
-  const [locationSuccess, setLocationSuccess] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
+
+  // Sync global site-opening GPS coordinates into local checkout state
+  useEffect(() => {
+    if (globalCoords) {
+      setCoordinates(globalCoords);
+    }
+  }, [globalCoords]);
 
   // Lock delivery mode according to current Route
   useEffect(() => {
@@ -96,51 +110,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
       setTableNum('');
     }
   }, [isDineInRoute, setDeliveryMode, urlTable]);
-
-  const handleUseCurrentLocation = () => {
-    if (typeof window === 'undefined' || !navigator.geolocation) {
-      setLocationError('Geolocation is not supported by your browser. Please type your address manually.');
-      return;
-    }
-
-    setIsLocating(true);
-    setLocationError(null);
-
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0,
-    };
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        setCoordinates({ lat, lng });
-        setLocationSuccess(true);
-        setIsLocating(false);
-
-        // Populate landmark hint if empty while keeping Line 1 (Flat/House) open for manual typing
-        if (!addressLine2) {
-          setAddressLine2('Kaladhungi Road, Haldwani (263139)');
-        }
-      },
-      (error) => {
-        setIsLocating(false);
-        setLocationSuccess(false);
-        let msg = 'Unable to fetch your GPS coordinates. Please type your delivery address manually.';
-        if (error.code === error.PERMISSION_DENIED) {
-          msg = 'Location access was denied. Please type your delivery address manually.';
-        } else if (error.code === error.POSITION_UNAVAILABLE) {
-          msg = 'GPS signal unavailable. Please enter your address manually.';
-        } else if (error.code === error.TIMEOUT) {
-          msg = 'Location request timed out. Please enter your address manually.';
-        }
-        setLocationError(msg);
-      },
-      options
-    );
-  };
 
   if (!isOpen) return null;
 
@@ -194,12 +163,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
       }
     }
 
-    // 2. Non-blocking Geolocation: If GPS detection is running, cancel wait immediately
-    if (isLocating) {
-      setIsLocating(false);
-    }
-
-    // 3. Instant Execution: Set isLoading to true
+    // Instant Execution: Set isLoading to true
     setIsLoading(true);
 
     const combinedDeliveryAddress = [addressLine1.trim(), addressLine2.trim()].filter(Boolean).join(', ');
@@ -633,68 +597,57 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
                         />
                       </div>
 
-                      {/* GPS Location Action Bar */}
-                      <div className="flex items-center justify-between pt-0.5">
-                        <span className="text-[11px] font-bold text-gray-700">Delivery Address</span>
-                        <button
-                          type="button"
-                          onClick={handleUseCurrentLocation}
-                          disabled={isLocating}
-                          className={`inline-flex items-center space-x-1 text-[11px] font-extrabold px-2.5 py-1 rounded-lg transition-all shadow-2xs ${
-                            locationSuccess
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200'
-                              : 'bg-red-50 text-[#e31837] border border-red-200 hover:bg-red-100'
-                          }`}
-                        >
-                          {isLocating ? (
-                            <>
-                              <span className="w-3 h-3 border-2 border-red-500 border-t-transparent rounded-full animate-spin shrink-0" />
-                              <span>Detecting GPS...</span>
-                            </>
-                          ) : locationSuccess ? (
-                            <>
-                              <span>📍</span>
-                              <span>Location Captured ✓</span>
-                            </>
-                          ) : (
-                            <>
-                              <span>📍</span>
-                              <span>Use Current Location</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-
-                      {/* GPS Location Success Indicator */}
-                      {locationSuccess && coordinates && (
-                        <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-2 flex items-center justify-between text-[11px] text-emerald-900 animate-fade-in">
-                          <div className="flex items-center space-x-1.5 min-w-0">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-ping" />
-                            <span className="font-extrabold text-emerald-800 shrink-0">GPS Attached:</span>
-                            <span className="font-mono text-[10.5px] text-emerald-700 truncate">
-                              {coordinates.lat.toFixed(5)}, {coordinates.lng.toFixed(5)}
-                            </span>
+                      {/* Verified Non-Editable GPS Exact Location (Captured on Site Opening) */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-1.5 text-xs font-black text-slate-800">
+                            <Navigation className="w-3.5 h-3.5 text-[#002855]" />
+                            <span>GPS Exact Location</span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCoordinates(null);
-                              setLocationSuccess(false);
-                            }}
-                            className="text-[10px] text-gray-500 hover:text-red-500 underline shrink-0 ml-2 cursor-pointer"
-                          >
-                            Clear GPS
-                          </button>
+                          {coordinates ? (
+                            <span className="inline-flex items-center space-x-1 text-[10px] font-black px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                              <span>Verified GPS ✓</span>
+                            </span>
+                          ) : globalIsLocating ? (
+                            <span className="inline-flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
+                              <span className="w-2 h-2 border border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                              <span>Detecting...</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                              Manual Entry
+                            </span>
+                          )}
                         </div>
-                      )}
 
-                      {/* GPS Error Prompt */}
-                      {locationError && (
-                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-2 text-[11px] text-amber-800 flex items-start space-x-1.5 animate-fade-in">
-                          <span className="shrink-0 mt-0.5">⚠️</span>
-                          <span>{locationError}</span>
+                        {/* Non-Editable GPS Coordinates & Address Display */}
+                        <div className="bg-white border border-slate-200 rounded-lg p-2 text-[11px] select-all">
+                          {coordinates ? (
+                            <div className="space-y-0.5">
+                              <div className="flex items-center space-x-1 text-slate-700 font-medium">
+                                <span className="font-bold text-slate-900 shrink-0">Area:</span>
+                                <span className="truncate text-slate-800">
+                                  {globalAddress || 'Haldwani, Uttarakhand'}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-1 text-[10.5px] font-mono text-emerald-700">
+                                <span className="text-slate-500 shrink-0">Coords:</span>
+                                <span>
+                                  {coordinates.lat.toFixed(6)}, {coordinates.lng.toFixed(6)}
+                                </span>
+                                <span className="text-[9.5px] text-slate-400 ml-auto font-sans font-medium italic">
+                                  (Auto-locked)
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-slate-500 italic text-[10.5px]">
+                              Location permission was skipped. Delivery will follow the address typed below.
+                            </p>
+                          )}
                         </div>
-                      )}
+                      </div>
 
                       {/* Line 1: House / Flat / Building No. */}
                       <div className="relative">
