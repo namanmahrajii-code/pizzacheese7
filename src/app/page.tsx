@@ -23,7 +23,12 @@ import {
 import { useCartStore } from '@/store/cartStore';
 import { Sparkles, Utensils, Award, Info, Heart } from 'lucide-react';
 
+import { useSearchParams } from 'next/navigation';
+
 function HomeContent() {
+  const searchParams = useSearchParams();
+  const trackingParam = searchParams?.get('tracking') === 'true';
+
   const [categories, setCategories] = useState<CategoryItem[]>(INITIAL_CATEGORIES);
   const [products, setProducts] = useState<ProductItem[]>(INITIAL_PRODUCTS);
   const [banners, setBanners] = useState<BannerItem[]>(INITIAL_BANNERS);
@@ -32,7 +37,7 @@ function HomeContent() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [vegFilter, setVegFilter] = useState<boolean | null>(null); // null = all, true = veg, false = non-veg
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [activeNavTab, setActiveNavTab] = useState<'menu' | 'deals' | 'cart' | 'profile'>('menu');
+  const [activeNavTab, setActiveNavTab] = useState<'menu' | 'deals' | 'orders' | 'cart' | 'profile'>('menu');
 
   // Modals
   const [customizingProduct, setCustomizingProduct] = useState<ProductItem | null>(null);
@@ -49,19 +54,20 @@ function HomeContent() {
     setDeliveryMode('Delivery');
   }, [setDeliveryMode]);
 
-  // Auto-Recover Order on Page Load:
-  // Runs on mount to check for an active order: const savedOrderId = localStorage.getItem('activeOrderId')
+  // Auto-Recover Order on Page Load (Only auto-open tracking if ?tracking=true was requested)
   useEffect(() => {
     try {
       const savedOrderId = localStorage.getItem('activeOrderId');
       if (savedOrderId) {
         setRecoveredOrderId(savedOrderId);
-        setIsViewingTracking(true);
+        if (trackingParam) {
+          setIsViewingTracking(true);
+        }
       }
     } catch (e) {
       console.warn('Could not read activeOrderId from localStorage:', e);
     }
-  }, []);
+  }, [trackingParam]);
 
   // Fetch live menu from API (with instant static data already pre-loaded)
   useEffect(() => {
@@ -121,15 +127,18 @@ function HomeContent() {
 
   const handleOrderPlaced = (orderId: string) => {
     setActiveOrderId(orderId);
-    setIsOrderStatusOpen(true);
+    setRecoveredOrderId(orderId);
+    setIsViewingTracking(true);
   };
 
-  const handleSelectNavTab = (tab: 'menu' | 'deals' | 'cart' | 'profile') => {
+  const handleSelectNavTab = (tab: 'menu' | 'deals' | 'orders' | 'cart' | 'profile') => {
     setActiveNavTab(tab);
     if (tab === 'cart') {
       setIsCartOpen(true);
     } else if (tab === 'deals') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (tab === 'orders') {
+      setIsViewingTracking(true);
     }
   };
 

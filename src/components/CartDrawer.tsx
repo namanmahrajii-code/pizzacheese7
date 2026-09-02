@@ -93,8 +93,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
       }
     } else {
       setDeliveryMode('Delivery');
+      setTableNum('');
     }
-  }, [isDineInRoute, setDeliveryMode, urlTable, tableNum]);
+  }, [isDineInRoute, setDeliveryMode, urlTable]);
 
   const handleUseCurrentLocation = () => {
     if (typeof window === 'undefined' || !navigator.geolocation) {

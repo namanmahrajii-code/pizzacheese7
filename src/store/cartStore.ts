@@ -167,6 +167,11 @@ export const useCartStore = create<CartStore>()(
     }),
     {
       name: '7cheese-cart-storage',
+      partialize: (state) => ({
+        items: state.items,
+        appliedCoupon: state.appliedCoupon,
+        discountAmount: state.discountAmount,
+      }),
     }
   )
 );
