@@ -42,6 +42,13 @@ function HomeContent() {
   const [recoveredOrderId, setRecoveredOrderId] = useState<string | null>(null);
   const [isViewingTracking, setIsViewingTracking] = useState<boolean>(false);
 
+  const { setDeliveryMode } = useCartStore();
+
+  // Force Delivery mode when on the Home Page
+  useEffect(() => {
+    setDeliveryMode('Delivery');
+  }, [setDeliveryMode]);
+
   // Auto-Recover Order on Page Load:
   // Runs on mount to check for an active order: const savedOrderId = localStorage.getItem('activeOrderId')
   useEffect(() => {

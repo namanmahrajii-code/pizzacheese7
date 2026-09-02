@@ -57,8 +57,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
     getTotalCount,
   } = useCartStore();
 
-  const isDineIn = Boolean(pathname?.startsWith('/dine-in') || deliveryMode === 'Dine-in');
-  const isDineInRoute = isDineIn;
+  // STRICT SEPARATION: Dine-in ONLY on /dine-in route. All other routes are strictly HOME DELIVERY!
+  const isDineInRoute = Boolean(pathname?.startsWith('/dine-in'));
+  const isDineIn = isDineInRoute;
 
   const [couponInput, setCouponInput] = useState('');
   const [couponFeedback, setCouponFeedback] = useState<{ success?: boolean; message?: string } | null>(null);
