@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
+import { usePathname } from 'next/navigation';
 import VegNonVegIcon from './VegNonVegIcon';
-import { SlidersHorizontal } from 'lucide-react';
 
 interface FilterBarProps {
   vegFilter: boolean | null; // null = all, true = veg only, false = non-veg only
@@ -19,8 +19,15 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   selectedCategory,
   onSelectCategory,
 }) => {
+  const pathname = usePathname();
+  const isDineIn = pathname?.startsWith('/dine-in');
+
   return (
-    <div className="sticky top-[108px] z-20 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 py-2 shadow-2xs">
+    <div
+      className={`sticky z-20 bg-white border-b border-gray-200 px-4 py-2 shadow-xs ${
+        isDineIn ? 'top-[53px]' : 'top-[98px]'
+      }`}
+    >
       <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar">
         {/* Veg Only Pill */}
         <button

@@ -6,6 +6,8 @@
 let audioCtx: AudioContext | null = null;
 let activeGainNodes: GainNode[] = [];
 let stopTimer: NodeJS.Timeout | null = null;
+let persistentAudio: HTMLAudioElement | null = null;
+let audioUnlocked = false;
 
 /**
  * Initializes or returns the shared AudioContext
@@ -17,19 +19,77 @@ export function getAudioContext(): AudioContext | null {
   if (!AudioContextClass) return null;
 
   if (!audioCtx || audioCtx.state === 'closed') {
-    audioCtx = new AudioContextClass();
+    try {
+      audioCtx = new AudioContextClass();
+    } catch {
+      return null;
+    }
   }
   return audioCtx;
 }
 
 /**
- * Ensures AudioContext is unlocked upon user interaction (click, keypress, etc.)
+ * Returns a cached HTML5 Audio element pointing to /sounds/order-alert.wav
+ */
+export function getPersistentAudio(): HTMLAudioElement | null {
+  if (typeof window === 'undefined') return null;
+  if (!persistentAudio) {
+    try {
+      persistentAudio = new Audio('/sounds/order-alert.wav');
+      persistentAudio.preload = 'auto';
+      persistentAudio.volume = 1.0;
+    } catch {
+      return null;
+    }
+  }
+  return persistentAudio;
+}
+
+/**
+ * Checks if browser audio subsystem has been unlocked
+ */
+export function isAudioSystemUnlocked(): boolean {
+  if (typeof window === 'undefined') return true;
+  if (audioUnlocked) return true;
+  const ctx = getAudioContext();
+  return ctx ? ctx.state === 'running' : false;
+}
+
+/**
+ * Fully unlocks both Web Audio API and HTML5 Audio upon any user gesture
  */
 export function unlockAudioContext(): void {
+  if (typeof window === 'undefined') return;
+
   const ctx = getAudioContext();
-  if (ctx && ctx.state === 'suspended') {
-    ctx.resume().catch(() => {});
+  if (ctx) {
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    try {
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+      audioUnlocked = true;
+    } catch {}
   }
+
+  try {
+    const audio = getPersistentAudio();
+    if (audio) {
+      audio.currentTime = 0;
+      const p = audio.play();
+      if (p !== undefined) {
+        p.then(() => {
+          audio.pause();
+          audio.currentTime = 0;
+          audioUnlocked = true;
+        }).catch(() => {});
+      }
+    }
+  } catch {}
 }
 
 /**
@@ -64,7 +124,16 @@ export function stopOrderAlert(): void {
     stopTimer = null;
   }
 
-  // Fade out active gain nodes
+  // Stop HTML5 Audio
+  try {
+    const audio = getPersistentAudio();
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+  } catch {}
+
+  // Fade out and disconnect active Web Audio nodes
   activeGainNodes.forEach((gain) => {
     try {
       const now = gain.context.currentTime;
@@ -78,115 +147,104 @@ export function stopOrderAlert(): void {
 
 /**
  * Plays a high-fidelity, 3-second kitchen POS order alert chime.
- * Uses Web Audio API synthesis with HTML5 Audio fallback.
- *
- * Pattern:
- * - 0.0s - 0.7s: Chime 1 (G5 784Hz -> C6 1046.5Hz)
- * - 1.0s - 1.7s: Chime 2 (A5 880Hz -> D6 1174.66Hz)
- * - 2.0s - 3.0s: Chime 3 (Harmonic chord C6 1046.5Hz + E6 1318.5Hz), fading to 0 at exactly 3.0s.
+ * Triggers both HTML5 Audio (/sounds/order-alert.wav) and Web Audio API synthesis for 100% reliability.
  */
 export async function playOrderAlert(durationMs = 3000): Promise<void> {
   if (!isSoundAlertEnabled()) return;
 
   stopOrderAlert();
 
-  const ctx = getAudioContext();
+  // 1. Trigger HTML5 Audio immediately
+  try {
+    const audio = getPersistentAudio();
+    if (audio) {
+      audio.currentTime = 0;
+      audio.volume = 1.0;
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn('HTML5 Audio play warning:', err);
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('HTML5 Audio error:', err);
+  }
 
-  // Try Web Audio API first (instant, zero network latency)
+  // 2. Concurrently synthesize Web Audio chime
+  const ctx = getAudioContext();
   if (ctx) {
     try {
       if (ctx.state === 'suspended') {
-        await ctx.resume();
+        await ctx.resume().catch(() => {});
       }
 
-      const startTime = ctx.currentTime;
-      const masterGain = ctx.createGain();
-      masterGain.gain.setValueAtTime(0.75, startTime);
-      masterGain.connect(ctx.destination);
-      activeGainNodes.push(masterGain);
+      if (ctx.state === 'running') {
+        const startTime = ctx.currentTime;
+        const masterGain = ctx.createGain();
+        masterGain.gain.setValueAtTime(0.8, startTime);
+        masterGain.connect(ctx.destination);
+        activeGainNodes.push(masterGain);
 
-      // Helper to schedule a bell chime with fundamental and overtone
-      const scheduleBellChime = (
-        freq: number,
-        startOffset: number,
-        duration: number,
-        volume = 0.5
-      ) => {
-        const t0 = startTime + startOffset;
+        const scheduleBellChime = (
+          freq: number,
+          startOffset: number,
+          duration: number,
+          volume = 0.5
+        ) => {
+          const t0 = startTime + startOffset;
 
-        // Fundamental oscillator
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, t0);
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, t0);
 
-        // Overtone oscillator for warm restaurant bell timbre
-        const overtone = ctx.createOscillator();
-        const overtoneGain = ctx.createGain();
-        overtone.type = 'sine';
-        overtone.frequency.setValueAtTime(freq * 2, t0);
+          const overtone = ctx.createOscillator();
+          const overtoneGain = ctx.createGain();
+          overtone.type = 'sine';
+          overtone.frequency.setValueAtTime(freq * 2, t0);
 
-        // Envelope: immediate strike, exponential decay
-        gain.gain.setValueAtTime(0.001, t0);
-        gain.gain.exponentialRampToValueAtTime(volume, t0 + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+          gain.gain.setValueAtTime(0.001, t0);
+          gain.gain.exponentialRampToValueAtTime(volume, t0 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
 
-        overtoneGain.gain.setValueAtTime(0.001, t0);
-        overtoneGain.gain.exponentialRampToValueAtTime(volume * 0.35, t0 + 0.02);
-        overtoneGain.gain.exponentialRampToValueAtTime(0.001, t0 + duration * 0.7);
+          overtoneGain.gain.setValueAtTime(0.001, t0);
+          overtoneGain.gain.exponentialRampToValueAtTime(volume * 0.35, t0 + 0.02);
+          overtoneGain.gain.exponentialRampToValueAtTime(0.001, t0 + duration * 0.7);
 
-        osc.connect(gain);
-        overtone.connect(overtoneGain);
-        gain.connect(masterGain);
-        overtoneGain.connect(masterGain);
+          osc.connect(gain);
+          overtone.connect(overtoneGain);
+          gain.connect(masterGain);
+          overtoneGain.connect(masterGain);
 
-        osc.start(t0);
-        osc.stop(t0 + duration);
-        overtone.start(t0);
-        overtone.stop(t0 + duration);
-      };
+          osc.start(t0);
+          osc.stop(t0 + duration);
+          overtone.start(t0);
+          overtone.stop(t0 + duration);
+        };
 
-      // Burst 1 (0.0s - 0.75s)
-      scheduleBellChime(784, 0.0, 0.35, 0.5);
-      scheduleBellChime(1046.5, 0.22, 0.55, 0.6);
+        // Chime burst 1 (0.0s - 0.75s)
+        scheduleBellChime(880, 0.0, 0.35, 0.55);
+        scheduleBellChime(1174.66, 0.22, 0.55, 0.65);
 
-      // Burst 2 (1.0s - 1.75s)
-      scheduleBellChime(880, 1.0, 0.35, 0.5);
-      scheduleBellChime(1174.66, 1.22, 0.55, 0.6);
+        // Chime burst 2 (1.0s - 1.75s)
+        scheduleBellChime(880, 1.0, 0.35, 0.55);
+        scheduleBellChime(1174.66, 1.22, 0.55, 0.65);
 
-      // Burst 3 (2.0s - 3.0s) - Rich resolution chord
-      scheduleBellChime(1046.5, 2.0, 0.98, 0.5);
-      scheduleBellChime(1318.5, 2.0, 0.98, 0.4);
-      scheduleBellChime(1568.0, 2.0, 0.98, 0.3);
-
-      // Smoothly cutoff at durationMs (default 3000ms)
-      stopTimer = setTimeout(() => {
-        stopOrderAlert();
-      }, durationMs);
-
-      return;
+        // Chime burst 3 (2.0s - 3.0s) - Resolution chord
+        scheduleBellChime(1046.5, 2.0, 0.98, 0.55);
+        scheduleBellChime(1318.5, 2.0, 0.98, 0.45);
+        scheduleBellChime(1568.0, 2.0, 0.98, 0.35);
+      }
     } catch (e) {
-      console.warn('Web Audio playback error, trying HTML5 Audio fallback:', e);
+      console.warn('Web Audio synthesis warning:', e);
     }
   }
 
-  // Fallback: HTML5 Audio with generated 3-second WAV
-  try {
-    const audio = new Audio('/sounds/order-alert.wav');
-    audio.volume = 0.85;
-    audio.play().catch((err) => {
-      console.warn('HTML5 audio play blocked:', err);
-    });
-
-    stopTimer = setTimeout(() => {
-      try {
-        audio.pause();
-        audio.currentTime = 0;
-      } catch {}
-    }, durationMs);
-  } catch (err) {
-    console.error('All audio playback methods failed:', err);
-  }
+  // Exactly stop at durationMs (3000ms)
+  stopTimer = setTimeout(() => {
+    stopOrderAlert();
+  }, durationMs);
 }
 
 /**
@@ -196,8 +254,12 @@ export async function requestNotificationPermission(): Promise<boolean> {
   if (typeof window === 'undefined' || !('Notification' in window)) return false;
   if (Notification.permission === 'granted') return true;
   if (Notification.permission !== 'denied') {
-    const permission = await Notification.requestPermission();
-    return permission === 'granted';
+    try {
+      const permission = await Notification.requestPermission();
+      return permission === 'granted';
+    } catch {
+      return false;
+    }
   }
   return false;
 }

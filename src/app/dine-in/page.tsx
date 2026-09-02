@@ -186,7 +186,7 @@ function DineInContent() {
       </div>
 
       {/* 3. Circular Category Navigation */}
-      <div className="sticky top-[110px] z-20 bg-slate-50/95 backdrop-blur-md pt-2 pb-1 border-b border-gray-200/50 shadow-2xs">
+      <div className="bg-white border-b border-gray-100">
         <CategoryScroll
           categories={categories}
           selectedCategory={selectedCategory}

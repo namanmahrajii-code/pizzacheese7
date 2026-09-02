@@ -62,6 +62,7 @@ import {
   setSoundAlertEnabled,
   requestNotificationPermission,
   fireDesktopNotification,
+  isAudioSystemUnlocked,
 } from '@/lib/orderAlert';
 
 interface OrderItemData {
@@ -131,6 +132,7 @@ export default function AdminPage() {
 
   // Real-Time Order Sound Alert & Notification State
   const [soundAlertActive, setSoundAlertActive] = useState<boolean>(true);
+  const [isAudioUnlocked, setIsAudioUnlocked] = useState<boolean>(false);
   const [activeAlertOrder, setActiveAlertOrder] = useState<OrderData | null>(null);
   const [isAlertPlaying, setIsAlertPlaying] = useState<boolean>(false);
   const knownOrderIdsRef = React.useRef<Set<string>>(new Set());
@@ -182,6 +184,7 @@ export default function AdminPage() {
   // Check saved session, initialize audio & order tracking
   useEffect(() => {
     setSoundAlertActive(isSoundAlertEnabled());
+    setIsAudioUnlocked(isAudioSystemUnlocked());
 
     // Populate known order IDs from pre-cached orders so old orders don't alert
     if (orders.length > 0) {
@@ -191,13 +194,15 @@ export default function AdminPage() {
       isInitialOrdersLoadRef.current = false;
     }
 
-    // Unlock browser Web Audio API on first user interaction anywhere
-    const handleFirstGesture = () => {
+    // Unlock browser Web Audio API & HTML5 Audio on any user gesture
+    const handleUserGesture = () => {
       unlockAudioContext();
+      setIsAudioUnlocked(true);
     };
-    window.addEventListener('click', handleFirstGesture, { once: true });
-    window.addEventListener('keydown', handleFirstGesture, { once: true });
-    window.addEventListener('touchstart', handleFirstGesture, { once: true });
+    window.addEventListener('click', handleUserGesture);
+    window.addEventListener('touchstart', handleUserGesture);
+    window.addEventListener('pointerdown', handleUserGesture);
+    window.addEventListener('keydown', handleUserGesture);
 
     const session = localStorage.getItem('7cheese_admin_auth');
     if (session === 'true') {
@@ -210,9 +215,10 @@ export default function AdminPage() {
     }
 
     return () => {
-      window.removeEventListener('click', handleFirstGesture);
-      window.removeEventListener('keydown', handleFirstGesture);
-      window.removeEventListener('touchstart', handleFirstGesture);
+      window.removeEventListener('click', handleUserGesture);
+      window.removeEventListener('touchstart', handleUserGesture);
+      window.removeEventListener('pointerdown', handleUserGesture);
+      window.removeEventListener('keydown', handleUserGesture);
     };
   }, []);
 
@@ -238,7 +244,7 @@ export default function AdminPage() {
   const processIncomingOrders = (incomingOrders: OrderData[]) => {
     if (!Array.isArray(incomingOrders)) return;
 
-    // Initial load: populate known order IDs without alerting for historical orders
+    // Initial load: populate known order IDs without alerting for old historical orders
     if (isInitialOrdersLoadRef.current) {
       incomingOrders.forEach((o) => {
         if (o?.id) knownOrderIdsRef.current.add(o.id);
@@ -248,6 +254,16 @@ export default function AdminPage() {
       try {
         localStorage.setItem('7cheese_admin_persisted_orders', JSON.stringify(incomingOrders));
       } catch {}
+
+      // If there is any active Pending order placed in the last 10 minutes, trigger alert!
+      const recentPending = incomingOrders.find((o) => {
+        if (o.status !== 'Pending') return false;
+        const diffMs = Date.now() - new Date(o.createdAt).getTime();
+        return diffMs >= 0 && diffMs < 10 * 60 * 1000;
+      });
+      if (recentPending) {
+        triggerNewOrderAlert(recentPending);
+      }
       return;
     }
 
@@ -1317,6 +1333,36 @@ _Please deliver hot & cheesy!_`;
       {/* 3. MAIN OPERATIONAL CONTAINER                            */}
       {/* ======================================================== */}
       <main className="p-4 sm:p-6 flex-1 space-y-5 max-w-7xl w-full mx-auto">
+        {/* Audio Alert Standby / Activation Prompt */}
+        {!isAudioUnlocked && (
+          <div
+            onClick={() => {
+              unlockAudioContext();
+              setIsAudioUnlocked(true);
+              playOrderAlert(1500);
+            }}
+            className="bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border-2 border-amber-400/50 hover:border-amber-300 text-amber-200 p-3.5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 cursor-pointer transition-all shadow-lg animate-pulse"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-lg shrink-0 shadow-md">
+                🔊
+              </div>
+              <div>
+                <p className="text-xs font-black text-white">Audio Notifications Ready</p>
+                <p className="text-[11px] text-amber-200/90">
+                  Tap here or anywhere on the screen to enable instant 3-second sound alerts for incoming orders!
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs px-4 py-2 rounded-xl shrink-0 cursor-pointer shadow-md transition-all"
+            >
+              Activate Sound 🔔
+            </button>
+          </div>
+        )}
+
         {/* KPI Metrics */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
           <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-md">
