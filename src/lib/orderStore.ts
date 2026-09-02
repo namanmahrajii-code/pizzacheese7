@@ -76,53 +76,15 @@ function saveOrdersToDisk(orders: OrderData[]) {
   }
 }
 
-// Default initial orders
-const INITIAL_DEMO_ORDERS: OrderData[] = [
-  {
-    id: 'ORD-70192',
-    customerName: 'Aarav Sharma',
-    customerPhone: '+91 98765 43210',
-    deliveryAddress: 'Flat 402, Green Valley Apartments, Kaladhungi Road, Haldwani',
-    deliveryType: 'Delivery',
-    orderType: 'Delivery',
-    tableNumber: null,
-    totalAmount: 437,
-    status: 'Preparing',
-    coordinates: { lat: 29.2183, lng: 79.513 },
-    createdAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-    items: [
-      { id: 'i1', name: 'Peppy Paneer', size: 'Regular', crust: 'Cheese Burst', quantity: 1, price: 279 },
-      { id: 'i2', name: 'Garlic Bread (Veg)', size: 'Standard', crust: 'Standard', quantity: 2, price: 158 },
-    ],
-  },
-  {
-    id: 'ORD-70193',
-    customerName: 'Priya Patel',
-    customerPhone: '+91 91234 56789',
-    deliveryAddress: 'Table #04 (Dine-in at 7Cheese Pizza Haldwani)',
-    deliveryType: 'Dine-in',
-    orderType: 'Dine-in',
-    tableNumber: '04',
-    totalAmount: 648,
-    status: 'Pending',
-    coordinates: null,
-    createdAt: new Date(Date.now() - 1000 * 60 * 3).toISOString(),
-    items: [
-      { id: 'i3', name: 'Chicken Supremo', size: 'Medium', crust: 'Cheese Burst', quantity: 1, price: 529 },
-      { id: 'i4', name: 'Choco Lava Cake', size: 'Standard', crust: 'Standard', quantity: 1, price: 119 },
-    ],
-  },
-];
-
 if (!globalThis.__GLOBAL_ORDERS__) {
   const diskOrders = loadOrdersFromDisk();
-  globalThis.__GLOBAL_ORDERS__ = diskOrders || [...INITIAL_DEMO_ORDERS];
+  globalThis.__GLOBAL_ORDERS__ = diskOrders || [];
 }
 
 export function getGlobalOrders(): OrderData[] {
-  if (!globalThis.__GLOBAL_ORDERS__ || globalThis.__GLOBAL_ORDERS__.length === 0) {
+  if (!globalThis.__GLOBAL_ORDERS__) {
     const diskOrders = loadOrdersFromDisk();
-    globalThis.__GLOBAL_ORDERS__ = diskOrders || [...INITIAL_DEMO_ORDERS];
+    globalThis.__GLOBAL_ORDERS__ = diskOrders || [];
   }
   return globalThis.__GLOBAL_ORDERS__;
 }
