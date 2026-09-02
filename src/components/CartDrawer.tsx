@@ -281,30 +281,39 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
       onOrderPlaced(placedOrderId);
 
       // Instantly push to the /thank-you route
-      router.push(
-        `/thank-you?orderId=${encodeURIComponent(placedOrderId)}&type=${encodeURIComponent(
-          currentMode
-        )}&payment=${encodeURIComponent(impliedPaymentMethod)}&table=${encodeURIComponent(
-          tableNum.trim()
-        )}`
-      );
+      const targetUrl = `/thank-you?orderId=${encodeURIComponent(placedOrderId)}&type=${encodeURIComponent(
+        currentMode
+      )}&payment=${encodeURIComponent(impliedPaymentMethod)}&table=${encodeURIComponent(
+        tableNum.trim()
+      )}`;
+
+      if (typeof window !== 'undefined') {
+        window.location.href = targetUrl;
+      } else {
+        router.push(targetUrl);
+      }
     } catch (err) {
       console.error('Order creation error:', err);
       clearCart();
       onClose();
       const mockId = `7C-${Math.floor(100000 + Math.random() * 900000)}`;
       onOrderPlaced(mockId);
-      router.push(
-        `/thank-you?orderId=${encodeURIComponent(mockId)}&type=${encodeURIComponent(
-          currentMode
-        )}&payment=${encodeURIComponent(impliedPaymentMethod)}&table=${encodeURIComponent(
-          tableNum.trim()
-        )}`
-      );
+      const fallbackUrl = `/thank-you?orderId=${encodeURIComponent(mockId)}&type=${encodeURIComponent(
+        currentMode
+      )}&payment=${encodeURIComponent(impliedPaymentMethod)}&table=${encodeURIComponent(
+        tableNum.trim()
+      )}`;
+      if (typeof window !== 'undefined') {
+        window.location.href = fallbackUrl;
+      } else {
+        router.push(fallbackUrl);
+      }
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs flex justify-end animate-fade-in">
