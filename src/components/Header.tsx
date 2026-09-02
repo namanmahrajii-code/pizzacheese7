@@ -134,21 +134,8 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, onOpenProfile })
       )}
 
       {/* Mode Banner according to Route */}
-      <div className="px-3 pb-2.5">
-        {isDineInRoute ? (
-          <div className="bg-amber-500/20 border border-amber-400/40 p-2 rounded-xl backdrop-blur-xs flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <span className="text-base">🍽️</span>
-              <div>
-                <span className="text-xs font-black text-amber-200 block">Table Ordering Mode</span>
-                <span className="text-[10px] text-amber-100/80">Self-order at table • ₹0 Delivery Fee</span>
-              </div>
-            </div>
-            <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-md uppercase">
-              QR Active
-            </span>
-          </div>
-        ) : (
+      {!isDineInRoute && (
+        <div className="px-3 pb-2.5">
           <div className="bg-white/10 border border-white/10 p-2 rounded-xl backdrop-blur-xs flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Bike className="w-4 h-4 text-red-400" />
@@ -161,8 +148,8 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, onOpenProfile })
               LIVE
             </span>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </header>
   );
 };

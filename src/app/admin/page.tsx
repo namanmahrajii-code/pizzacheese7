@@ -45,11 +45,24 @@ import {
   Copy,
   Settings,
   HelpCircle,
+  Volume2,
+  VolumeX,
+  Bell,
+  BellRing,
 } from 'lucide-react';
 import { STORE_LOCATION, DEFAULT_PAYMENT_SETTINGS } from '@/lib/constants';
 import { ProductItem, CategoryItem, OfferItem } from '@/lib/data';
 import { db } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import {
+  playOrderAlert,
+  stopOrderAlert,
+  unlockAudioContext,
+  isSoundAlertEnabled,
+  setSoundAlertEnabled,
+  requestNotificationPermission,
+  fireDesktopNotification,
+} from '@/lib/orderAlert';
 
 interface OrderItemData {
   id: string;
@@ -116,6 +129,13 @@ export default function AdminPage() {
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [isResettingOrders, setIsResettingOrders] = useState(false);
 
+  // Real-Time Order Sound Alert & Notification State
+  const [soundAlertActive, setSoundAlertActive] = useState<boolean>(true);
+  const [activeAlertOrder, setActiveAlertOrder] = useState<OrderData | null>(null);
+  const [isAlertPlaying, setIsAlertPlaying] = useState<boolean>(false);
+  const knownOrderIdsRef = React.useRef<Set<string>>(new Set());
+  const isInitialOrdersLoadRef = React.useRef<boolean>(true);
+
   // Menu Management State
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
@@ -159,8 +179,26 @@ export default function AdminPage() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Check saved session
+  // Check saved session, initialize audio & order tracking
   useEffect(() => {
+    setSoundAlertActive(isSoundAlertEnabled());
+
+    // Populate known order IDs from pre-cached orders so old orders don't alert
+    if (orders.length > 0) {
+      orders.forEach((o) => {
+        if (o?.id) knownOrderIdsRef.current.add(o.id);
+      });
+      isInitialOrdersLoadRef.current = false;
+    }
+
+    // Unlock browser Web Audio API on first user interaction anywhere
+    const handleFirstGesture = () => {
+      unlockAudioContext();
+    };
+    window.addEventListener('click', handleFirstGesture, { once: true });
+    window.addEventListener('keydown', handleFirstGesture, { once: true });
+    window.addEventListener('touchstart', handleFirstGesture, { once: true });
+
     const session = localStorage.getItem('7cheese_admin_auth');
     if (session === 'true') {
       setIsAuthenticated(true);
@@ -170,7 +208,70 @@ export default function AdminPage() {
       fetchPaymentSettings();
       fetchProfileData();
     }
+
+    return () => {
+      window.removeEventListener('click', handleFirstGesture);
+      window.removeEventListener('keydown', handleFirstGesture);
+      window.removeEventListener('touchstart', handleFirstGesture);
+    };
   }, []);
+
+  // Trigger 3-second audio chime and UI alert notification for newly received order
+  const triggerNewOrderAlert = (newOrder: OrderData) => {
+    setActiveAlertOrder(newOrder);
+    setIsAlertPlaying(true);
+    playOrderAlert(3000);
+    fireDesktopNotification(newOrder);
+
+    // Stop visual wave/playing indicator after 3 seconds
+    setTimeout(() => {
+      setIsAlertPlaying(false);
+    }, 3000);
+
+    // Auto-dismiss banner after 15 seconds if not interacted with
+    setTimeout(() => {
+      setActiveAlertOrder((curr) => (curr?.id === newOrder.id ? null : curr));
+    }, 15000);
+  };
+
+  // Process incoming orders from polling or real-time Firestore listener
+  const processIncomingOrders = (incomingOrders: OrderData[]) => {
+    if (!Array.isArray(incomingOrders)) return;
+
+    // Initial load: populate known order IDs without alerting for historical orders
+    if (isInitialOrdersLoadRef.current) {
+      incomingOrders.forEach((o) => {
+        if (o?.id) knownOrderIdsRef.current.add(o.id);
+      });
+      isInitialOrdersLoadRef.current = false;
+      setOrders(incomingOrders);
+      try {
+        localStorage.setItem('7cheese_admin_persisted_orders', JSON.stringify(incomingOrders));
+      } catch {}
+      return;
+    }
+
+    // Identify brand new orders received during this session
+    const brandNew = incomingOrders.filter(
+      (o) => o && o.id && !knownOrderIdsRef.current.has(o.id)
+    );
+
+    // Add all incoming to known IDs
+    incomingOrders.forEach((o) => {
+      if (o?.id) knownOrderIdsRef.current.add(o.id);
+    });
+
+    setOrders(incomingOrders);
+    try {
+      localStorage.setItem('7cheese_admin_persisted_orders', JSON.stringify(incomingOrders));
+    } catch {}
+
+    // Whenever a new order is received, play the 3-second notification alert!
+    if (brandNew.length > 0) {
+      const latestOrder = brandNew[0];
+      triggerNewOrderAlert(latestOrder);
+    }
+  };
 
   const fetchOrders = async () => {
     setIsLoadingOrders(true);
@@ -201,10 +302,7 @@ export default function AdminPage() {
           }
         } catch {}
 
-        setOrders(merged);
-        try {
-          localStorage.setItem('7cheese_admin_persisted_orders', JSON.stringify(merged));
-        } catch {}
+        processIncomingOrders(merged);
       }
     } catch (e) {
       console.error('Failed to fetch orders:', e);
@@ -272,17 +370,49 @@ export default function AdminPage() {
     }
   };
 
-  // Poll orders every 6 seconds when authenticated
+  // Poll orders every 4.5 seconds and listen to real-time Firestore updates
   useEffect(() => {
     if (!isAuthenticated) return;
-    const interval = setInterval(fetchOrders, 6000);
-    return () => clearInterval(interval);
+
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 4500);
+
+    let unsubscribeFirestore: (() => void) | null = null;
+    try {
+      if (db) {
+        const ordersRef = collection(db, 'orders');
+        const q = query(ordersRef, orderBy('createdAt', 'desc'));
+        unsubscribeFirestore = onSnapshot(
+          q,
+          (snapshot) => {
+            if (!snapshot.empty) {
+              const fsOrders: OrderData[] = snapshot.docs.map((d: any) => ({
+                id: d.id,
+                ...(d.data() as any),
+              }));
+              processIncomingOrders(fsOrders);
+            }
+          },
+          (err) => {
+            console.warn('Firestore onSnapshot listener fallback:', err);
+          }
+        );
+      }
+    } catch (e) {
+      console.warn('Firestore listener setup error:', e);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (unsubscribeFirestore) unsubscribeFirestore();
+    };
   }, [isAuthenticated]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
     setIsLoggingIn(true);
+    unlockAudioContext();
 
     try {
       const res = await fetch('/api/admin/auth', {
@@ -295,6 +425,7 @@ export default function AdminPage() {
       if (res.ok && data.success) {
         setIsAuthenticated(true);
         localStorage.setItem('7cheese_admin_auth', 'true');
+        requestNotificationPermission();
         fetchOrders();
         fetchMenu();
         fetchOffers();
@@ -362,6 +493,10 @@ export default function AdminPage() {
     try {
       await fetch('/api/admin/orders', { method: 'DELETE' });
       setOrders([]);
+      knownOrderIdsRef.current.clear();
+      setActiveAlertOrder(null);
+      stopOrderAlert();
+      setIsAlertPlaying(false);
       try {
         localStorage.removeItem('7cheese_admin_persisted_orders');
       } catch {}
@@ -1021,6 +1156,65 @@ _Please deliver hot & cheesy!_`;
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-3">
+          {/* Sound Alert Toggle Button */}
+          <button
+            onClick={() => {
+              const nextVal = !soundAlertActive;
+              setSoundAlertActive(nextVal);
+              setSoundAlertEnabled(nextVal);
+              if (nextVal) {
+                unlockAudioContext();
+                playOrderAlert(3000);
+                setIsAlertPlaying(true);
+                setTimeout(() => setIsAlertPlaying(false), 3000);
+                requestNotificationPermission();
+              } else {
+                stopOrderAlert();
+                setIsAlertPlaying(false);
+              }
+            }}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+              soundAlertActive
+                ? 'bg-emerald-950/40 hover:bg-emerald-900/60 border-emerald-700/50 text-emerald-300'
+                : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-400'
+            }`}
+            title={
+              soundAlertActive
+                ? '3-second sound alert active on new orders (click to mute)'
+                : 'Sound alert muted (click to enable)'
+            }
+          >
+            {soundAlertActive ? (
+              <>
+                <Volume2 className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                <span className="hidden sm:inline">Alert: ON</span>
+              </>
+            ) : (
+              <>
+                <VolumeX className="w-3.5 h-3.5 text-slate-400" />
+                <span className="hidden sm:inline">Alert: OFF</span>
+              </>
+            )}
+          </button>
+
+          {/* Test 3-Second Sound Alert Button */}
+          <button
+            onClick={() => {
+              unlockAudioContext();
+              playOrderAlert(3000);
+              setIsAlertPlaying(true);
+              setTimeout(() => setIsAlertPlaying(false), 3000);
+              requestNotificationPermission();
+            }}
+            className="hidden sm:flex items-center space-x-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            title="Test 3-second notification alert sound"
+          >
+            <BellRing
+              className={`w-3.5 h-3.5 ${isAlertPlaying ? 'animate-bounce text-amber-400' : ''}`}
+            />
+            <span>Test 3s Alert</span>
+          </button>
+
           <button
             onClick={() => {
               fetchOrders();
@@ -1040,7 +1234,6 @@ _Please deliver hot & cheesy!_`;
             <span className="hidden sm:inline">Refresh</span>
           </button>
 
-
           <button
             onClick={handleLogout}
             className="flex items-center space-x-1.5 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
@@ -1050,6 +1243,75 @@ _Please deliver hot & cheesy!_`;
           </button>
         </div>
       </header>
+
+      {/* ======================================================== */}
+      {/* 2.5 REAL-TIME NEW ORDER NOTIFICATION BANNER              */}
+      {/* ======================================================== */}
+      {activeAlertOrder && (
+        <div className="bg-gradient-to-r from-red-600 via-[#e31837] to-amber-600 text-white px-4 sm:px-6 py-3.5 shadow-2xl border-b-2 border-amber-300/60 sticky top-[57px] z-25 animate-pulse">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center space-x-3 w-full sm:w-auto">
+              <div className="w-10 h-10 bg-white text-red-600 rounded-2xl flex items-center justify-center shrink-0 shadow-lg animate-bounce">
+                <BellRing className="w-5 h-5 text-[#e31837]" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="bg-white/25 backdrop-blur-xs text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    🔔 NEW ORDER RECEIVED!
+                  </span>
+                  {isAlertPlaying && (
+                    <span className="flex items-center space-x-1 text-[11px] font-bold text-amber-200">
+                      <Volume2 className="w-3.5 h-3.5 animate-pulse" />
+                      <span>3s Alert Chime Playing...</span>
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm font-black mt-0.5">
+                  Order #{activeAlertOrder.id} •{' '}
+                  <span className="text-amber-200">₹{activeAlertOrder.totalAmount}</span>
+                  {activeAlertOrder.tableNumber
+                    ? ` • Table #${activeAlertOrder.tableNumber} (Dine-in)`
+                    : ` • ${activeAlertOrder.deliveryType || 'Delivery'}`}
+                  {activeAlertOrder.customerName && ` • ${activeAlertOrder.customerName}`}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 shrink-0 w-full sm:w-auto justify-end">
+              <button
+                onClick={() => {
+                  stopOrderAlert();
+                  setIsAlertPlaying(false);
+                  setActiveSidebarTab('orders');
+                  setOrdersStream(
+                    activeAlertOrder.deliveryType === 'Dine-in' ||
+                      activeAlertOrder.orderType === 'Dine-in'
+                      ? 'dine-in'
+                      : 'delivery'
+                  );
+                  setOrderSubFilter('All');
+                }}
+                className="bg-white hover:bg-slate-100 text-slate-950 font-black text-xs px-4 py-2 rounded-xl shadow-lg transition-transform active:scale-95 cursor-pointer flex items-center space-x-1.5"
+              >
+                <span>View Order</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                onClick={() => {
+                  stopOrderAlert();
+                  setIsAlertPlaying(false);
+                  setActiveAlertOrder(null);
+                }}
+                className="bg-black/30 hover:bg-black/50 text-white rounded-xl p-2 transition-colors cursor-pointer"
+                title="Dismiss notification"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ======================================================== */}
       {/* 3. MAIN OPERATIONAL CONTAINER                            */}
