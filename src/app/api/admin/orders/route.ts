@@ -8,11 +8,18 @@ export async function GET() {
     if (db) {
       const ordersRef = collection(db, 'orders');
       const q = query(ordersRef, orderBy('createdAt', 'desc'));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const fsOrders: OrderData[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...(doc.data() as any),
+
+      // Fast 600ms race so response is never blocked by disabled or offline Firestore
+      const getDocsPromise = getDocs(q);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore timeout')), 600)
+      );
+      const snapshot = (await Promise.race([getDocsPromise, timeoutPromise])) as any;
+
+      if (snapshot?.docs && !snapshot.empty) {
+        const fsOrders: OrderData[] = snapshot.docs.map((d: any) => ({
+          id: d.id,
+          ...(d.data() as any),
         }));
 
         // Merge with local store to ensure no orders are missing
@@ -21,10 +28,10 @@ export async function GET() {
       }
     }
   } catch (fsErr) {
-    console.warn('Firestore orders query fallback to orderStore:', fsErr);
+    // Firestore offline / timeout fallback
   }
 
-  // Return central persistent orders
+  // Return central persistent orders instantly
   return NextResponse.json({
     orders: getGlobalOrders(),
   });
@@ -56,23 +63,24 @@ export async function POST(req: Request) {
   }
 }
 
-// Reset/clear all orders
+// Reset/clear all orders instantly
 export async function DELETE() {
   try {
-    // 1. Reset memory and disk cache
+    // 1. Reset memory and disk cache instantly
     setGlobalOrders([]);
 
-    // 2. Clear Firestore orders collection if online
+    // 2. Clear Firestore orders collection in background (non-blocking)
     try {
       if (db) {
-        const ordersRef = collection(db, 'orders');
-        const snap = await getDocs(ordersRef);
-        const batchDeletes = snap.docs.map((d) => deleteDoc(doc(db, 'orders', d.id)));
-        await Promise.all(batchDeletes);
+        getDocs(collection(db, 'orders'))
+          .then((snap) => {
+            snap.docs.forEach((d) => {
+              deleteDoc(doc(db, 'orders', d.id)).catch(() => {});
+            });
+          })
+          .catch(() => {});
       }
-    } catch (e) {
-      console.warn('Firestore orders reset fallback:', e);
-    }
+    } catch (e) {}
 
     return NextResponse.json({
       success: true,
