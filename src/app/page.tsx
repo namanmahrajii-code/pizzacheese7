@@ -40,6 +40,7 @@ function HomeContent() {
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [isOrderStatusOpen, setIsOrderStatusOpen] = useState<boolean>(false);
   const [recoveredOrderId, setRecoveredOrderId] = useState<string | null>(null);
+  const [isViewingTracking, setIsViewingTracking] = useState<boolean>(false);
 
   // Auto-Recover Order on Page Load:
   // Runs on mount to check for an active order: const savedOrderId = localStorage.getItem('activeOrderId')
@@ -48,6 +49,7 @@ function HomeContent() {
       const savedOrderId = localStorage.getItem('activeOrderId');
       if (savedOrderId) {
         setRecoveredOrderId(savedOrderId);
+        setIsViewingTracking(true);
       }
     } catch (e) {
       console.warn('Could not read activeOrderId from localStorage:', e);
@@ -124,17 +126,19 @@ function HomeContent() {
     }
   };
 
-  // If savedOrderId exists, bypass the standard menu/cart view and immediately display the 'Order Tracking / Active Order' UI.
-  if (recoveredOrderId) {
+  // If user is viewing active order, display the 'Order Tracking / Active Order' UI.
+  if (isViewingTracking && recoveredOrderId) {
     return (
       <ActiveOrderTracking
         orderId={recoveredOrderId}
-        onBackToMenu={() => setRecoveredOrderId(null)}
+        onBackToMenu={() => setIsViewingTracking(false)}
         onOrderFinished={() => {
           try {
             localStorage.removeItem('activeOrderId');
+            localStorage.removeItem('activeOrderData');
           } catch (e) {}
           setRecoveredOrderId(null);
+          setIsViewingTracking(false);
         }}
       />
     );
@@ -247,8 +251,16 @@ function HomeContent() {
 
         {/* Bottom Floating Cart Bar & Fixed Navigation */}
         <BottomNav
-          activeTab={activeNavTab}
-          onSelectTab={handleSelectNavTab}
+          activeTab={isViewingTracking ? 'orders' : activeNavTab}
+          activeOrderId={recoveredOrderId}
+          onOpenTracking={() => setIsViewingTracking(true)}
+          onSelectTab={(tab) => {
+            if (tab === 'orders') {
+              setIsViewingTracking(true);
+            } else {
+              handleSelectNavTab(tab as any);
+            }
+          }}
           onOpenCart={() => setIsCartOpen(true)}
         />
 

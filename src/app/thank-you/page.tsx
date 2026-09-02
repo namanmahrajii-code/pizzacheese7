@@ -177,7 +177,11 @@ function ThankYouContent() {
           {/* Action Buttons */}
           <div className="space-y-2.5 pt-2">
             <Link
-              href={isDineIn ? `/dine-in?table=${encodeURIComponent(tableNumber || '')}` : '/'}
+              href={
+                isDineIn
+                  ? `/dine-in?tracking=true&orderId=${encodeURIComponent(orderId)}&table=${encodeURIComponent(tableNumber || '')}`
+                  : '/'
+              }
               className="w-full bg-[#e31837] hover:bg-[#c4122d] active:scale-[0.99] text-white font-black text-sm py-3.5 rounded-xl shadow-lg shadow-red-950/50 flex items-center justify-center space-x-2 transition-all cursor-pointer"
             >
               <Clock className="w-4 h-4" />

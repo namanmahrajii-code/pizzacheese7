@@ -10,6 +10,7 @@ import ModifierModal from '@/components/ModifierModal';
 import CartDrawer from '@/components/CartDrawer';
 import BottomNav from '@/components/BottomNav';
 import OrderStatusModal from '@/components/OrderStatusModal';
+import ActiveOrderTracking from '@/components/ActiveOrderTracking';
 import {
   ProductItem,
   CategoryItem,
@@ -25,6 +26,9 @@ import { useSearchParams } from 'next/navigation';
 function DineInContent() {
   const searchParams = useSearchParams();
   const tableParam = searchParams?.get('table') || '';
+  const trackingParam = searchParams?.get('tracking') === 'true';
+  const orderIdParam = searchParams?.get('orderId') || '';
+
   const { setDeliveryMode, setCustomerInfo } = useCartStore();
 
   const [categories, setCategories] = useState<CategoryItem[]>(INITIAL_CATEGORIES);
@@ -35,13 +39,17 @@ function DineInContent() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [vegFilter, setVegFilter] = useState<boolean | null>(null); // null = all, true = veg, false = non-veg
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [activeNavTab, setActiveNavTab] = useState<'menu' | 'deals' | 'cart' | 'profile'>('menu');
+  const [activeNavTab, setActiveNavTab] = useState<'menu' | 'deals' | 'orders' | 'cart' | 'profile'>('menu');
 
   // Modals
   const [customizingProduct, setCustomizingProduct] = useState<ProductItem | null>(null);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [isOrderStatusOpen, setIsOrderStatusOpen] = useState<boolean>(false);
+
+  // Active Order Live Tracking state
+  const [recoveredOrderId, setRecoveredOrderId] = useState<string | null>(null);
+  const [isViewingTracking, setIsViewingTracking] = useState<boolean>(false);
 
   // Lock to Dine-in mode and prefill table if present in QR code url
   useEffect(() => {
@@ -50,6 +58,19 @@ function DineInContent() {
       setCustomerInfo({ tableNumber: tableParam });
     }
   }, [tableParam, setDeliveryMode, setCustomerInfo]);
+
+  // Check for active order or tracking url params
+  useEffect(() => {
+    try {
+      const savedId = orderIdParam || localStorage.getItem('activeOrderId');
+      if (savedId) {
+        setRecoveredOrderId(savedId);
+        if (trackingParam || orderIdParam) {
+          setIsViewingTracking(true);
+        }
+      }
+    } catch {}
+  }, [trackingParam, orderIdParam]);
 
   // Fetch live menu from API
   useEffect(() => {
@@ -106,8 +127,27 @@ function DineInContent() {
 
   const handleOrderPlaced = (orderId: string) => {
     setActiveOrderId(orderId);
-    setIsOrderStatusOpen(true);
+    setRecoveredOrderId(orderId);
+    setIsViewingTracking(true);
   };
+
+  // If user clicked View Live Status, display full ActiveOrderTracking component!
+  if (isViewingTracking && recoveredOrderId) {
+    return (
+      <ActiveOrderTracking
+        orderId={recoveredOrderId}
+        onBackToMenu={() => setIsViewingTracking(false)}
+        onOrderFinished={() => {
+          try {
+            localStorage.removeItem('activeOrderId');
+            localStorage.removeItem('activeOrderData');
+          } catch {}
+          setRecoveredOrderId(null);
+          setIsViewingTracking(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-gray-900 pb-28">
@@ -128,7 +168,7 @@ function DineInContent() {
                 </h2>
                 {tableParam && (
                   <span className="bg-white text-amber-800 text-[10px] font-black px-1.5 py-0.2 rounded-md">
-                    Table #{tableParam}
+                    Table #{tableParam.replace(/^table\s*/i, '')}
                   </span>
                 )}
               </div>
@@ -184,19 +224,17 @@ function DineInContent() {
                 <ProductCard
                   key={product.id}
                   product={product}
-                  onOpenCustomizer={(prod) => setCustomizingProduct(prod)}
+                  onOpenCustomizer={(p) => setCustomizingProduct(p)}
                 />
               ))}
             </div>
           </section>
         ))}
 
-        {filteredProducts.length === 0 && (
-          <div className="py-16 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
-              🍕
-            </div>
-            <h3 className="font-extrabold text-base text-gray-800">No items match your filter</h3>
+        {groupedProducts.length === 0 && (
+          <div className="text-center py-16 bg-white rounded-3xl border border-gray-100 shadow-xs">
+            <div className="text-4xl mb-2">🔍</div>
+            <h3 className="font-black text-gray-700 text-sm">No items found</h3>
             <p className="text-xs text-gray-500 mt-1">Try resetting your search or veg/non-veg filter</p>
             <button
               onClick={() => {
@@ -237,12 +275,18 @@ function DineInContent() {
         />
       )}
 
-      {/* 9. Fixed Bottom Navigation & Floating View Cart Bar */}
+      {/* 9. Fixed Bottom Navigation with Live Order Tab & Floating Strip */}
       <BottomNav
-        activeTab={activeNavTab}
+        activeTab={isViewingTracking ? 'orders' : activeNavTab}
+        activeOrderId={recoveredOrderId}
+        onOpenTracking={() => setIsViewingTracking(true)}
         onSelectTab={(tab) => {
-          setActiveNavTab(tab);
-          if (tab === 'cart') setIsCartOpen(true);
+          if (tab === 'orders') {
+            setIsViewingTracking(true);
+          } else {
+            setActiveNavTab(tab);
+            if (tab === 'cart') setIsCartOpen(true);
+          }
         }}
         onOpenCart={() => setIsCartOpen(true)}
       />
