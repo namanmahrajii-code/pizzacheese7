@@ -1040,15 +1040,6 @@ _Please deliver hot & cheesy!_`;
             <span className="hidden sm:inline">Refresh</span>
           </button>
 
-          <button
-            onClick={handleResetAllOrders}
-            disabled={isResettingOrders || orders.length === 0}
-            className="flex items-center space-x-1.5 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 hover:text-white px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs disabled:opacity-40"
-            title="Reset All Orders"
-          >
-            <Trash2 className={`w-3.5 h-3.5 ${isResettingOrders ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Reset Orders</span>
-          </button>
 
           <button
             onClick={handleLogout}
@@ -1448,39 +1439,6 @@ _Please deliver hot & cheesy!_`;
               </div>
             )}
 
-            {/* Separate Dedicated Section: Reset POS Orders */}
-            <div className="bg-slate-900/90 border border-red-950/60 rounded-3xl p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6">
-              <div className="flex items-center space-x-3.5">
-                <div className="w-11 h-11 rounded-2xl bg-red-500/15 text-red-400 border border-red-500/30 flex items-center justify-center text-xl shrink-0">
-                  🗑️
-                </div>
-                <div>
-                  <h4 className="text-sm font-black text-white">Reset POS Orders & Clear Board</h4>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Permanently wipe all dine-in, delivery tickets, and test orders from this terminal.
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleResetAllOrders}
-                disabled={isResettingOrders || orders.length === 0}
-                className="px-4 py-2.5 rounded-2xl text-xs font-black text-white bg-red-600 hover:bg-red-700 shadow-md transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-40 shrink-0"
-              >
-                {isResettingOrders ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Resetting Orders...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4" />
-                    <span>Reset All Orders ({orders.length})</span>
-                  </>
-                )}
-              </button>
-            </div>
           </div>
         )}
 
@@ -2167,6 +2125,49 @@ _Please deliver hot & cheesy!_`;
                   </button>
                 </div>
               </form>
+            </div>
+
+            {/* Danger Zone: Reset POS Orders */}
+            <div className="bg-slate-900 border border-red-950/70 rounded-3xl p-6 sm:p-8 shadow-xl space-y-4">
+              <div className="flex items-center space-x-3 border-b border-slate-800 pb-4">
+                <div className="w-10 h-10 bg-red-500/15 text-red-400 border border-red-500/30 rounded-xl flex items-center justify-center text-xl shrink-0">
+                  🗑️
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">Danger Zone: Reset POS Orders</h3>
+                  <p className="text-xs text-slate-400">
+                    Permanently wipe all dine-in, delivery tickets, and test orders from this terminal.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+                <div className="text-xs text-slate-400">
+                  <p>Active orders in system: <strong className="text-white font-mono">{orders.length} orders</strong></p>
+                  <p className="text-[11px] text-red-400/80 mt-0.5">
+                    Safe area: Placed here in Profile to prevent accidental clicks on the main board.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleResetAllOrders}
+                  disabled={isResettingOrders || orders.length === 0}
+                  className="px-5 py-3 rounded-xl text-xs font-black text-white bg-red-600 hover:bg-red-700 active:scale-[0.99] shadow-lg shadow-red-950/50 transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-40 shrink-0"
+                >
+                  {isResettingOrders ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Resetting Orders...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Reset All Orders ({orders.length})</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
