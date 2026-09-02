@@ -225,6 +225,15 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
   const isCancelled = order?.status === 'Cancelled';
   const currentStep = getStepIndex(order?.status || 'Pending');
 
+  const formatTableNumber = (val?: string | null) => {
+    if (!val) return 'Table';
+    const trimmed = val.trim();
+    if (/^table\s*/i.test(trimmed)) {
+      return trimmed;
+    }
+    return `Table ${trimmed}`;
+  };
+
   const steps = [
     {
       title: 'Order Confirmed',
@@ -239,7 +248,7 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
     {
       title: isDineIn ? 'Serving to Table' : 'Out for Delivery',
       desc: isDineIn
-        ? `Delivering sizzling hot to Table ${order?.tableNumber || 'Service'}`
+        ? `Delivering sizzling hot to ${formatTableNumber(order?.tableNumber)}`
         : 'Rider picked up order and is on the way',
       icon: isDineIn ? UtensilsCrossed : Bike,
     },
@@ -296,7 +305,7 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
 
   const destinationText =
     order?.orderType === 'Dine-in'
-      ? `Dine-in Service • Table ${order?.tableNumber || 'General'}`
+      ? `Dine-in Service • ${formatTableNumber(order?.tableNumber)}`
       : order?.deliveryAddress || order?.address || 'Kaladhungi Road, Haldwani';
 
   return (
@@ -507,7 +516,7 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
                     Order Type
                   </span>
                   <span className="font-black text-xs text-gray-800">
-                    {order?.orderType === 'Dine-in' ? `Table ${order.tableNumber || 'General'}` : 'Delivery'}
+                    {order?.orderType === 'Dine-in' ? formatTableNumber(order.tableNumber) : 'Delivery'}
                   </span>
                 </div>
               </div>
@@ -570,12 +579,12 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
                 <Phone className="w-4 h-4 text-[#002855]" />
                 <div>
                   <span className="font-bold text-gray-900 block leading-tight">Need help with order?</span>
-                  <span className="text-[10px] text-gray-500">7Cheese Kaladhungi Road, Haldwani</span>
+                  <span className="text-[10px] text-gray-500">7Cheese Kaladhungi Road, Haldwani • {STORE_LOCATION.phone}</span>
                 </div>
               </div>
 
               <a
-                href={`https://wa.me/919876543210?text=${encodeURIComponent(`Hi 7Cheese, checking status of my order #${order?.id || orderId}`)}`}
+                href={`https://wa.me/919639152011?text=${encodeURIComponent(`Hi 7Cheese, checking status of my order #${order?.id || orderId}`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-[#002855] text-white font-extrabold text-[11px] px-3 py-1.5 rounded-xl shadow-xs hover:bg-[#001c3d] transition-colors"

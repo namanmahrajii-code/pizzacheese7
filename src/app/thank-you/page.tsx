@@ -144,7 +144,15 @@ function ThankYouContent() {
                 <span className="text-[10px] text-slate-500 block">Order Mode</span>
                 <div className="flex items-center space-x-1 font-bold text-white mt-0.5">
                   <span>{isDineIn ? '🍽️' : '🛵'}</span>
-                  <span>{isDineIn ? (tableNumber ? `Dine-in (${tableNumber})` : 'Dine-in') : 'Home Delivery'}</span>
+                  <span>
+                    {isDineIn
+                      ? tableNumber
+                        ? tableNumber.toLowerCase().startsWith('table')
+                          ? `Dine-in (${tableNumber})`
+                          : `Dine-in (Table ${tableNumber})`
+                        : 'Dine-in'
+                      : 'Home Delivery'}
+                  </span>
                 </div>
               </div>
 

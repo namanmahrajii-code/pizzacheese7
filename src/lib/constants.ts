@@ -7,7 +7,8 @@ export const STORE_LOCATION = {
   city: 'Haldwani',
   pincode: '263139',
   landmark: 'Near TVS Showroom',
-  phone: '+91 98765 43210',
+  phone: '+91 96391 52011',
+  whatsappNumber: '919639152011',
 };
 
 export const DEFAULT_PAYMENT_SETTINGS = {
