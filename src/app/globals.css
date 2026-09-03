@@ -51,3 +51,43 @@
 .shadow-bottom-bar {
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
 }
+
+/* Print Optimization for Tax Invoice & KOT Slips */
+@media print {
+  @page {
+    margin: 8mm;
+    size: auto;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide all dashboard UI, modals backdrops, sidebars, headers */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Show only the tax invoice printable section */
+  #tax-invoice-printable,
+  #tax-invoice-printable * {
+    visibility: visible;
+  }
+
+  #tax-invoice-printable {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 12px !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}

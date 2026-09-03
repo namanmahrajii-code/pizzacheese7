@@ -49,7 +49,11 @@ import {
   VolumeX,
   Bell,
   BellRing,
+  Printer,
+  FileText,
 } from 'lucide-react';
+import TaxInvoiceModal from '@/components/admin/TaxInvoiceModal';
+import SalesKOTPanel from '@/components/admin/SalesKOTPanel';
 import { STORE_LOCATION, DEFAULT_PAYMENT_SETTINGS } from '@/lib/constants';
 import { ProductItem, CategoryItem, OfferItem } from '@/lib/data';
 import { db } from '@/lib/firebase';
@@ -104,10 +108,21 @@ export default function AdminPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Main Active Sidebar View:
-  // 'orders' | 'menu' | 'offers' | 'analytics' | 'profile'
+  // 'orders' | 'sales' | 'menu' | 'offers' | 'analytics' | 'profile'
   const [activeSidebarTab, setActiveSidebarTab] = useState<
-    'orders' | 'menu' | 'offers' | 'analytics' | 'profile'
+    'orders' | 'sales' | 'menu' | 'offers' | 'analytics' | 'profile'
   >('orders');
+
+  // Tax Invoice & KOT Modal State
+  const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<OrderData | null>(null);
+  const [invoiceModalMode, setInvoiceModalMode] = useState<'invoice' | 'kot'>('invoice');
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState<boolean>(false);
+
+  const handleOpenInvoiceModal = (order: OrderData, mode: 'invoice' | 'kot' = 'invoice') => {
+    setSelectedInvoiceOrder(order);
+    setInvoiceModalMode(mode);
+    setIsInvoiceModalOpen(true);
+  };
 
   // In Orders View: Order Stream selection ('dine-in' vs 'delivery')
   const [ordersStream, setOrdersStream] = useState<'dine-in' | 'delivery'>('dine-in');
@@ -1018,6 +1033,11 @@ _Please deliver hot & cheesy!_`;
       badge: analyticsData.activeDineInCount + analyticsData.activeDeliveryCount,
     },
     {
+      id: 'sales' as const,
+      label: 'Sales & KOT Register',
+      icon: BarChart3,
+    },
+    {
       id: 'menu' as const,
       label: 'Menu Management',
       icon: Package,
@@ -1027,11 +1047,6 @@ _Please deliver hot & cheesy!_`;
       label: '🏷️ Offers & Promos',
       icon: Tag,
       badge: offers.filter((o) => o.isActive).length,
-    },
-    {
-      id: 'analytics' as const,
-      label: 'Sales Analytics',
-      icon: BarChart3,
     },
     {
       id: 'profile' as const,
@@ -1593,7 +1608,15 @@ _Please deliver hot & cheesy!_`;
                             </span>
                           </div>
 
-                          <div className="flex flex-col items-end space-y-1">
+                          <div className="flex items-center space-x-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenInvoiceModal(order, 'invoice')}
+                              className="p-1 rounded-lg bg-slate-850 hover:bg-white text-slate-400 hover:text-slate-950 border border-slate-700/60 transition-colors cursor-pointer"
+                              title="Official Tax Invoice Slip"
+                            >
+                              <Printer className="w-3 h-3" />
+                            </button>
                             {getStatusBadge(order.status)}
                           </div>
                         </div>
@@ -1688,6 +1711,28 @@ _Please deliver hot & cheesy!_`;
                             <span>Dispatch to Rider (WhatsApp)</span>
                           </a>
                         )}
+
+                        {/* Tax Invoice & KOT Slip Actions */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenInvoiceModal(order, 'invoice')}
+                            className="bg-white hover:bg-slate-200 text-slate-900 font-extrabold text-xs py-2 px-2 rounded-xl flex items-center justify-center space-x-1.5 shadow-sm transition-all cursor-pointer"
+                            title="Official Tax Invoice & Packing Slip"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>Tax Slip</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenInvoiceModal(order, 'kot')}
+                            className="bg-[#e31837] hover:bg-[#c4122d] text-white font-extrabold text-xs py-2 px-2 rounded-xl flex items-center justify-center space-x-1.5 shadow-sm transition-all cursor-pointer"
+                            title="Kitchen Order Ticket (KOT)"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Kitchen KOT</span>
+                          </button>
+                        </div>
 
                         {/* Status Progression Workflow */}
                         <div className="grid grid-cols-2 gap-2">
@@ -1908,10 +1953,17 @@ _Please deliver hot & cheesy!_`;
         )}
 
         {/* ======================================================== */}
-        {/* VIEW C: SALES ANALYTICS                                  */}
+        {/* VIEW C: SALES & KOT REGISTER PANEL                       */}
         {/* ======================================================== */}
-        {activeSidebarTab === 'analytics' && (
-          <div className="space-y-6">
+        {(activeSidebarTab === 'sales' || activeSidebarTab === 'analytics') && (
+          <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
+            {/* 1. Live Sales & KOT Register (Separates Live Delivery and Dine-In Orders) */}
+            <SalesKOTPanel
+              orders={orders}
+              onOpenInvoice={handleOpenInvoiceModal}
+            />
+
+            {/* 2. Visual Revenue Velocity & Trends */}
             <div className="bg-slate-900/90 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -2667,6 +2719,18 @@ _Please deliver hot & cheesy!_`;
             </form>
           </div>
         </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 5. EDITABLE TAX INVOICE & KOT SLIP MODAL                 */}
+      {/* ======================================================== */}
+      {selectedInvoiceOrder && (
+        <TaxInvoiceModal
+          order={selectedInvoiceOrder}
+          isOpen={isInvoiceModalOpen}
+          defaultMode={invoiceModalMode}
+          onClose={() => setIsInvoiceModalOpen(false)}
+        />
       )}
     </div>
   );
