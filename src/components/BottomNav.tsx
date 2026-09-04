@@ -25,26 +25,26 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 max-w-md mx-auto pointer-events-none">
-      {/* Floating Cart Strip (Domino's style: "X ITEMS | ₹XXX - VIEW CART >") */}
+      {/* Floating Cart Strip (Domino's style: "X ITEMS | ₹XXX - VIEW CART & ORDER NOW >") */}
       {itemCount > 0 && (
-        <div className="px-4 mb-2 pointer-events-auto animate-bounce-short">
+        <div className="px-3 mb-2 pointer-events-auto animate-bounce-short">
           <button
             onClick={onOpenCart}
-            className="w-full bg-[#008000] hover:bg-[#007000] active:scale-[0.99] text-white py-3 px-4 rounded-2xl shadow-xl flex items-center justify-between transition-all border border-emerald-400/40 cursor-pointer"
+            className="w-full bg-[#008000] hover:bg-[#007000] active:scale-[0.99] text-white py-3 px-4 rounded-2xl shadow-2xl flex items-center justify-between transition-all border border-emerald-400/50 cursor-pointer group"
           >
-            <div className="flex items-center space-x-2">
-              <span className="bg-white text-emerald-800 text-xs font-black px-2 py-0.5 rounded-full">
-                {itemCount}
+            <div className="flex items-center space-x-2.5">
+              <span className="bg-white text-[#008000] text-xs font-black px-2.5 py-1 rounded-xl shadow-xs">
+                {itemCount} {itemCount === 1 ? 'ITEM' : 'ITEMS'}
               </span>
               <div className="text-left leading-tight">
-                <span className="text-xs font-black block">₹{totalAmount}</span>
-                <span className="text-[10px] text-emerald-100 font-medium">Extra charges may apply</span>
+                <span className="text-sm font-black block tracking-tight">₹{totalAmount}</span>
+                <span className="text-[10px] text-emerald-100 font-medium">Extra savings applied</span>
               </div>
             </div>
 
-            <div className="flex items-center space-x-1 font-black text-xs uppercase tracking-wider">
-              <span>View Cart</span>
-              <ChevronRight className="w-4 h-4" />
+            <div className="flex items-center space-x-1.5 font-black text-xs uppercase tracking-wider bg-white/15 px-3 py-1.5 rounded-xl border border-white/20 group-hover:bg-white/25 transition-all">
+              <span>View Cart &amp; Order Now</span>
+              <ChevronRight className="w-4 h-4 stroke-[3]" />
             </div>
           </button>
         </div>

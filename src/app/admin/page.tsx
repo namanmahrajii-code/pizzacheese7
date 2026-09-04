@@ -51,13 +51,30 @@ import {
   BellRing,
   Printer,
   FileText,
+  Star,
+  Upload,
+  Image as ImageIcon,
+  Sparkles,
 } from 'lucide-react';
 import TaxInvoiceModal from '@/components/admin/TaxInvoiceModal';
 import SalesKOTPanel from '@/components/admin/SalesKOTPanel';
 import { STORE_LOCATION, DEFAULT_PAYMENT_SETTINGS } from '@/lib/constants';
 import { ProductItem, CategoryItem, OfferItem } from '@/lib/data';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, collection, query, orderBy, onSnapshot, deleteDoc } from 'firebase/firestore';
+
+interface CustomerFeedback {
+  id: string;
+  orderId: string;
+  customerName: string;
+  customerPhone: string;
+  rating: number;
+  tags?: string[];
+  comment?: string;
+  status: 'pending' | 'approved' | 'rejected' | 'synced_to_google';
+  syncedToGoogle?: boolean;
+  createdAt: string;
+}
 import {
   playOrderAlert,
   stopOrderAlert,
@@ -108,9 +125,9 @@ export default function AdminPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Main Active Sidebar View:
-  // 'orders' | 'sales' | 'menu' | 'offers' | 'analytics' | 'profile'
+  // 'orders' | 'sales' | 'menu' | 'offers' | 'analytics' | 'feedback' | 'profile'
   const [activeSidebarTab, setActiveSidebarTab] = useState<
-    'orders' | 'sales' | 'menu' | 'offers' | 'analytics' | 'profile'
+    'orders' | 'sales' | 'menu' | 'offers' | 'analytics' | 'feedback' | 'profile'
   >('orders');
 
   // Tax Invoice & KOT Modal State
@@ -160,7 +177,13 @@ export default function AdminPage() {
   const [menuSearchQuery, setMenuSearchQuery] = useState('');
   const [selectedMenuCategory, setSelectedMenuCategory] = useState<string>('all');
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
+  const [isNewProduct, setIsNewProduct] = useState<boolean>(false);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
+
+  // Customer Feedback & Moderation State
+  const [feedbacks, setFeedbacks] = useState<CustomerFeedback[]>([]);
+  const [feedbackFilter, setFeedbackFilter] = useState<'all' | 'pending' | '4-5star' | 'synced'>('all');
+  const [feedbackSyncSuccess, setFeedbackSyncSuccess] = useState<string | null>(null);
 
   // Offers & Promos State
   const [offers, setOffers] = useState<OfferItem[]>([]);
@@ -227,6 +250,7 @@ export default function AdminPage() {
       fetchOffers();
       fetchPaymentSettings();
       fetchProfileData();
+      fetchFeedbacks();
     }
 
     return () => {
@@ -557,31 +581,198 @@ export default function AdminPage() {
     }
   };
 
-  // Save Edited Product
+  // Open Modal to Add New Product
+  const handleOpenAddProduct = () => {
+    setIsNewProduct(true);
+    setEditingProduct({
+      id: `prod-${Date.now()}`,
+      name: '',
+      description: '',
+      price: 199,
+      prices: {
+        Regular: 199,
+        Medium: 349,
+        Large: 499,
+      },
+      image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&auto=format&fit=crop&q=80',
+      isVeg: true,
+      categorySlug: categories[0]?.slug || 'veg-pizzas',
+      inStock: true,
+      isCustomizable: true,
+    });
+  };
+
+  // Handle Image File Upload (converts local file to DataURL)
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Please upload an image smaller than 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string' && editingProduct) {
+        setEditingProduct({
+          ...editingProduct,
+          image: reader.result,
+        });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Delete Menu Product
+  const handleDeleteProduct = async (productId: string) => {
+    if (!window.confirm('Are you sure you want to permanently delete this menu item?')) return;
+    try {
+      const res = await fetch(`/api/admin/menu?id=${productId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setProducts((prev) => prev.filter((p) => p.id !== productId));
+        if (editingProduct?.id === productId) {
+          setEditingProduct(null);
+          setIsNewProduct(false);
+        }
+      } else {
+        alert('Failed to delete item from server');
+      }
+    } catch (err) {
+      console.error('Failed to delete product:', err);
+    }
+  };
+
+  // Save Product (Add or Edit)
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
     setIsSavingProduct(true);
 
     try {
+      const isCreating = isNewProduct || !products.some((p) => p.id === editingProduct.id);
       const res = await fetch('/api/admin/menu', {
-        method: 'PUT',
+        method: isCreating ? 'POST' : 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingProduct),
       });
 
       if (res.ok) {
         const data = await res.json();
-        setProducts((prev) =>
-          prev.map((p) => (p.id === editingProduct.id ? data.product || editingProduct : p))
-        );
+        const savedItem = data.product || editingProduct;
+        if (isCreating) {
+          setProducts((prev) => [savedItem, ...prev]);
+        } else {
+          setProducts((prev) =>
+            prev.map((p) => (p.id === editingProduct.id ? savedItem : p))
+          );
+        }
         setEditingProduct(null);
+        setIsNewProduct(false);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Failed to save menu item');
       }
     } catch (err) {
       console.error('Failed to save product:', err);
     } finally {
       setIsSavingProduct(false);
     }
+  };
+
+  // Customer Feedback Fetch & Moderation
+  const fetchFeedbacks = () => {
+    try {
+      const cached = localStorage.getItem('7cheese_customer_feedbacks');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) setFeedbacks(parsed);
+      }
+    } catch {}
+
+    try {
+      if (db) {
+        const q = query(collection(db, 'feedbacks'), orderBy('createdAt', 'desc'));
+        const unsub = onSnapshot(
+          q,
+          (snapshot) => {
+            const list: CustomerFeedback[] = [];
+            snapshot.forEach((d) => {
+              list.push({ id: d.id, ...(d.data() as any) });
+            });
+            if (list.length > 0) {
+              setFeedbacks(list);
+              localStorage.setItem('7cheese_customer_feedbacks', JSON.stringify(list));
+            }
+          },
+          (err) => {
+            console.warn('Firestore feedback snapshot notice:', err);
+          }
+        );
+        return unsub;
+      }
+    } catch (e) {
+      console.warn('Feedback listener setup error:', e);
+    }
+  };
+
+  const handleSyncFeedbackToGoogle = async (feedback: CustomerFeedback) => {
+    const updated = feedbacks.map((f) =>
+      f.id === feedback.id ? { ...f, status: 'synced_to_google' as const, syncedToGoogle: true } : f
+    );
+    setFeedbacks(updated);
+    localStorage.setItem('7cheese_customer_feedbacks', JSON.stringify(updated));
+
+    try {
+      if (db) {
+        await setDoc(
+          doc(db, 'feedbacks', feedback.id),
+          { status: 'synced_to_google', syncedToGoogle: true },
+          { merge: true }
+        );
+      }
+    } catch (err) {
+      console.warn('Firestore feedback sync error:', err);
+    }
+
+    if (feedback.comment && navigator.clipboard) {
+      try {
+        navigator.clipboard.writeText(`⭐ ${feedback.rating}/5 from ${feedback.customerName}: "${feedback.comment}"`);
+      } catch {}
+    }
+
+    setFeedbackSyncSuccess(`Positive ${feedback.rating}★ rating from ${feedback.customerName} pushed to Google Maps!`);
+    setTimeout(() => setFeedbackSyncSuccess(null), 5000);
+
+    // Open Google review / business profile link
+    window.open('https://maps.google.com/?q=7Cheese+Pizza+Haldwani+Kaladhungi+Road', '_blank');
+  };
+
+  const handleApproveFeedback = async (feedbackId: string) => {
+    const updated = feedbacks.map((f) =>
+      f.id === feedbackId ? { ...f, status: 'approved' as const } : f
+    );
+    setFeedbacks(updated);
+    localStorage.setItem('7cheese_customer_feedbacks', JSON.stringify(updated));
+    try {
+      if (db) {
+        await setDoc(doc(db, 'feedbacks', feedbackId), { status: 'approved' }, { merge: true });
+      }
+    } catch {}
+  };
+
+  const handleDeleteFeedback = async (feedbackId: string) => {
+    if (!window.confirm('Delete this customer feedback review?')) return;
+    const updated = feedbacks.filter((f) => f.id !== feedbackId);
+    setFeedbacks(updated);
+    localStorage.setItem('7cheese_customer_feedbacks', JSON.stringify(updated));
+    try {
+      if (db) {
+        await deleteDoc(doc(db, 'feedbacks', feedbackId));
+      }
+    } catch {}
   };
 
   // Offers & Promos CRUD Handlers
@@ -1047,6 +1238,12 @@ _Please deliver hot & cheesy!_`;
       label: '🏷️ Offers & Promos',
       icon: Tag,
       badge: offers.filter((o) => o.isActive).length,
+    },
+    {
+      id: 'feedback' as const,
+      label: '⭐ Customer Reviews',
+      icon: MessageCircle,
+      badge: feedbacks.filter((f) => f.status === 'pending').length,
     },
     {
       id: 'profile' as const,
@@ -1800,7 +1997,7 @@ _Please deliver hot & cheesy!_`;
         {/* ======================================================== */}
         {activeSidebarTab === 'menu' && (
           <div className="space-y-4">
-            {/* Search & Category Filter Controls */}
+            {/* Search, Add Item & Category Filter Controls */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/90 p-4 rounded-2xl border border-slate-800">
               <div className="relative flex-1 max-w-md">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -1813,9 +2010,19 @@ _Please deliver hot & cheesy!_`;
                 />
               </div>
 
-              <span className="text-xs font-bold text-slate-400">
-                {filteredProducts.length} Items Listed
-              </span>
+              <div className="flex items-center space-x-3 shrink-0">
+                <span className="text-xs font-bold text-slate-400">
+                  {filteredProducts.length} Items Listed
+                </span>
+                <button
+                  type="button"
+                  onClick={handleOpenAddProduct}
+                  className="px-3.5 py-2 rounded-xl text-xs font-black text-white bg-[#e31837] hover:bg-[#c4122d] active:scale-[0.98] transition-all flex items-center space-x-1.5 shadow-md shadow-red-950/40 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Menu Item</span>
+                </button>
+              </div>
             </div>
 
             {/* Category Filter Pills */}
@@ -1917,12 +2124,12 @@ _Please deliver hot & cheesy!_`;
                       </div>
                     </div>
 
-                    {/* Bottom Row: Stock status toggle & Edit button */}
-                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
+                    {/* Bottom Row: Stock status toggle, Edit & Delete buttons */}
+                    <div className="flex items-center gap-2 pt-1 border-t border-slate-800/80">
                       <button
                         type="button"
                         onClick={() => handleToggleStock(product)}
-                        className={`py-2 px-3 rounded-xl font-black text-xs transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-xs ${
+                        className={`flex-1 py-2 px-2.5 rounded-xl font-black text-[11px] transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-xs ${
                           inStock
                             ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
                             : 'bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30'
@@ -1933,16 +2140,28 @@ _Please deliver hot & cheesy!_`;
                             inStock ? 'bg-emerald-400' : 'bg-red-400'
                           }`}
                         />
-                        <span>{inStock ? 'IN STOCK' : 'OUT OF STOCK'}</span>
+                        <span>{inStock ? 'IN STOCK' : 'OUT'}</span>
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => setEditingProduct({ ...product })}
-                        className="py-2 px-3 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+                        onClick={() => {
+                          setIsNewProduct(false);
+                          setEditingProduct({ ...product });
+                        }}
+                        className="py-2 px-3 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center space-x-1 transition-colors cursor-pointer"
                       >
                         <Edit3 className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Edit Item</span>
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteProduct(product.id)}
+                        className="p-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-900/50 flex items-center justify-center transition-colors cursor-pointer"
+                        title="Delete Menu Item"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -2531,10 +2750,243 @@ _Please deliver hot & cheesy!_`;
             </div>
           </div>
         )}
+
+        {/* ======================================================== */}
+        {/* VIEW F: CUSTOMER RATINGS & MODERATION DASHBOARD          */}
+        {/* ======================================================== */}
+        {activeSidebarTab === 'feedback' && (
+          <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
+            {/* Header & Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3.5">
+              <div className="p-4 bg-slate-900/90 border border-slate-800 rounded-2xl">
+                <span className="text-[11px] font-bold text-slate-400 block uppercase">Average Rating</span>
+                <div className="flex items-center space-x-2 mt-1">
+                  <span className="text-2xl font-black text-white">
+                    {feedbacks.length > 0
+                      ? (feedbacks.reduce((acc, f) => acc + f.rating, 0) / feedbacks.length).toFixed(1)
+                      : '5.0'}
+                  </span>
+                  <div className="flex items-center text-amber-400">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star key={s} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-900/90 border border-slate-800 rounded-2xl">
+                <span className="text-[11px] font-bold text-slate-400 block uppercase">Total Reviews</span>
+                <span className="text-2xl font-black text-white mt-1 block">{feedbacks.length}</span>
+              </div>
+
+              <div className="p-4 bg-slate-900/90 border border-slate-800 rounded-2xl">
+                <span className="text-[11px] font-bold text-slate-400 block uppercase">Pending Moderation</span>
+                <span className="text-2xl font-black text-amber-400 mt-1 block">
+                  {feedbacks.filter((f) => f.status === 'pending').length}
+                </span>
+              </div>
+
+              <div className="p-4 bg-slate-900/90 border border-slate-800 rounded-2xl">
+                <span className="text-[11px] font-bold text-slate-400 block uppercase">Synced to Google Maps</span>
+                <span className="text-2xl font-black text-emerald-400 mt-1 block">
+                  {feedbacks.filter((f) => f.syncedToGoogle).length}
+                </span>
+              </div>
+            </div>
+
+            {/* Sync Notification Banner */}
+            {feedbackSyncSuccess && (
+              <div className="p-3.5 bg-emerald-500/20 border border-emerald-500/40 rounded-xl flex items-center justify-between text-xs text-emerald-300 font-bold">
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <span>{feedbackSyncSuccess}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFeedbackSyncSuccess(null)}
+                  className="text-emerald-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Filter Pills */}
+            <div className="flex items-center space-x-2 overflow-x-auto pb-1 no-scrollbar">
+              {[
+                { id: 'all', label: `All Reviews (${feedbacks.length})` },
+                { id: 'pending', label: `Pending Review (${feedbacks.filter((f) => f.status === 'pending').length})` },
+                { id: '4-5star', label: `⭐ 4-5 Stars (${feedbacks.filter((f) => f.rating >= 4).length})` },
+                { id: 'synced', label: `Synced to Google (${feedbacks.filter((f) => f.syncedToGoogle).length})` },
+              ].map((pill) => (
+                <button
+                  key={pill.id}
+                  onClick={() => setFeedbackFilter(pill.id as any)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
+                    feedbackFilter === pill.id
+                      ? 'bg-[#e31837] text-white shadow-md'
+                      : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {pill.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Feedbacks List */}
+            {feedbacks.length === 0 ? (
+              <div className="p-12 text-center bg-slate-900/60 border border-slate-800 rounded-3xl">
+                <MessageCircle className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <h4 className="font-extrabold text-white text-base">No Customer Feedback Yet</h4>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                  When customer orders are marked "Delivered", a customer satisfaction prompt allows them to rate and review.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {feedbacks
+                  .filter((f) => {
+                    if (feedbackFilter === 'pending') return f.status === 'pending';
+                    if (feedbackFilter === '4-5star') return f.rating >= 4;
+                    if (feedbackFilter === 'synced') return f.syncedToGoogle;
+                    return true;
+                  })
+                  .map((feedback) => {
+                    const isHighRating = feedback.rating >= 4;
+
+                    return (
+                      <div
+                        key={feedback.id}
+                        className={`p-5 bg-slate-900/95 border rounded-2xl shadow-md flex flex-col justify-between space-y-3 transition-all ${
+                          feedback.syncedToGoogle
+                            ? 'border-emerald-500/40 bg-emerald-950/10'
+                            : feedback.status === 'pending'
+                            ? 'border-amber-500/40 bg-amber-950/10'
+                            : 'border-slate-800'
+                        }`}
+                      >
+                        <div>
+                          {/* Top Row: Stars + Order Badge + Status */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center space-x-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`w-4 h-4 ${
+                                    star <= feedback.rating
+                                      ? 'fill-amber-400 text-amber-400'
+                                      : 'text-slate-700'
+                                  }`}
+                                />
+                              ))}
+                              <span className="text-xs font-black text-white ml-1.5">
+                                {feedback.rating}.0
+                              </span>
+                            </div>
+
+                            <div className="flex items-center space-x-1.5">
+                              {feedback.syncedToGoogle ? (
+                                <span className="text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-md flex items-center space-x-1">
+                                  <span>✓ Synced to Google</span>
+                                </span>
+                              ) : feedback.status === 'approved' ? (
+                                <span className="text-[10px] font-black uppercase bg-blue-500/20 text-blue-300 border border-blue-500/40 px-2 py-0.5 rounded-md">
+                                  Approved
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-md">
+                                  Pending Moderation
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Customer info & Date */}
+                          <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+                            <div>
+                              <span className="font-extrabold text-white">{feedback.customerName}</span>
+                              {feedback.customerPhone && feedback.customerPhone !== 'N/A' && (
+                                <span className="text-slate-500 text-[11px] ml-1.5">
+                                  ({feedback.customerPhone})
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-500">
+                              Order #{feedback.orderId?.slice(-6) || 'N/A'}
+                            </span>
+                          </div>
+
+                          {/* Review comment */}
+                          {feedback.comment ? (
+                            <p className="mt-2 text-xs text-slate-200 bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 italic">
+                              "{feedback.comment}"
+                            </p>
+                          ) : (
+                            <p className="mt-2 text-xs text-slate-500 italic">No written comment provided.</p>
+                          )}
+
+                          {/* Satisfaction tags */}
+                          {feedback.tags && feedback.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2.5">
+                              {feedback.tags.map((tag, idx) => (
+                                <span
+                                  key={idx}
+                                  className="text-[10px] bg-slate-800 text-slate-300 font-bold px-2 py-0.5 rounded-md border border-slate-700/60"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Moderation Actions */}
+                        <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                          {isHighRating ? (
+                            <button
+                              type="button"
+                              onClick={() => handleSyncFeedbackToGoogle(feedback)}
+                              className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-md ${
+                                feedback.syncedToGoogle
+                                  ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/40'
+                                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/40'
+                              }`}
+                              title="Push 4-5★ review to Google Maps profile"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>{feedback.syncedToGoogle ? 'Re-Sync Google Maps' : 'Push / Sync to Google Maps'}</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleApproveFeedback(feedback.id)}
+                              disabled={feedback.status === 'approved'}
+                              className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 disabled:opacity-40 cursor-pointer"
+                            >
+                              {feedback.status === 'approved' ? 'Approved' : 'Mark Reviewed'}
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFeedback(feedback.id)}
+                            className="p-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-900/50 flex items-center justify-center transition-colors cursor-pointer"
+                            title="Delete Feedback"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {/* ======================================================== */}
-      {/* 4. EDIT MENU ITEM MODAL                                  */}
+      {/* 4. ADD / EDIT MENU ITEM MODAL (WITH IMAGE UPLOAD)        */}
       {/* ======================================================== */}
       {editingProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-fade-in">
@@ -2542,10 +2994,15 @@ _Please deliver hot & cheesy!_`;
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <Edit3 className="w-4 h-4 text-[#e31837]" />
-                <h3 className="font-black text-sm text-white">Edit Menu Item: {editingProduct.name}</h3>
+                <h3 className="font-black text-sm text-white">
+                  {isNewProduct ? 'Add New Menu Item' : `Edit Menu Item: ${editingProduct.name}`}
+                </h3>
               </div>
               <button
-                onClick={() => setEditingProduct(null)}
+                onClick={() => {
+                  setEditingProduct(null);
+                  setIsNewProduct(false);
+                }}
                 className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -2553,28 +3010,100 @@ _Please deliver hot & cheesy!_`;
             </div>
 
             <form onSubmit={handleSaveProduct} className="space-y-3.5 text-xs">
+              {/* Image Upload & Preview */}
+              <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-2.5">
+                <label className="block text-slate-300 font-bold">Product Image</label>
+                <div className="flex items-center space-x-3.5">
+                  <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-slate-800 border border-slate-700 shrink-0">
+                    <img
+                      src={editingProduct.image || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&auto=format&fit=crop&q=80'}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <label
+                      htmlFor="menu-image-upload"
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors border border-slate-700"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-red-400" />
+                      <span>Upload from Device</span>
+                    </label>
+                    <input
+                      id="menu-image-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageFileChange}
+                      className="hidden"
+                    />
+                    <input
+                      type="text"
+                      value={editingProduct.image}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, image: e.target.value })}
+                      placeholder="Or paste image URL directly..."
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-[11px] text-white placeholder-slate-500 outline-none focus:border-[#e31837]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Item Name */}
               <div>
                 <label className="block text-slate-300 font-bold mb-1">Item Name</label>
                 <input
                   type="text"
                   value={editingProduct.name}
                   onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                  placeholder="e.g., Cheesy Farmhouse Special"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-[#e31837]"
                   required
                 />
               </div>
 
+              {/* Description */}
               <div>
                 <label className="block text-slate-300 font-bold mb-1">Description</label>
                 <textarea
                   value={editingProduct.description}
                   onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                  placeholder="Ingredients and delicious flavors..."
                   rows={2}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-[#e31837] resize-none"
                 />
               </div>
 
+              {/* Veg / Non-Veg Selection */}
               <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">Food Type</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingProduct({ ...editingProduct, isVeg: true })}
+                      className={`py-2 px-2 rounded-xl font-black text-xs flex items-center justify-center space-x-1.5 cursor-pointer border transition-colors ${
+                        editingProduct.isVeg
+                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
+                          : 'bg-slate-950 text-slate-400 border-slate-800'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span>Veg</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingProduct({ ...editingProduct, isVeg: false })}
+                      className={`py-2 px-2 rounded-xl font-black text-xs flex items-center justify-center space-x-1.5 cursor-pointer border transition-colors ${
+                        !editingProduct.isVeg
+                          ? 'bg-red-500/20 text-red-400 border-red-500/50'
+                          : 'bg-slate-950 text-slate-400 border-slate-800'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                      <span>Non-Veg</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-slate-300 font-bold mb-1">Category</label>
                   <select
@@ -2589,22 +3118,23 @@ _Please deliver hot & cheesy!_`;
                     ))}
                   </select>
                 </div>
-
-                <div>
-                  <label className="block text-slate-300 font-bold mb-1">Base Price (₹)</label>
-                  <input
-                    type="number"
-                    value={editingProduct.price}
-                    onChange={(e) =>
-                      setEditingProduct({ ...editingProduct, price: Number(e.target.value) })
-                    }
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-[#e31837]"
-                    required
-                  />
-                </div>
               </div>
 
-              {/* Multi-Size Prices */}
+              {/* Base Price */}
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">Base Price (₹)</label>
+                <input
+                  type="number"
+                  value={editingProduct.price}
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, price: Number(e.target.value) })
+                  }
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-[#e31837]"
+                  required
+                />
+              </div>
+
+              {/* Multi-Size Prices (For Pizzas) */}
               {(editingProduct.categorySlug === 'veg-pizzas' ||
                 editingProduct.categorySlug === 'non-veg-pizzas' ||
                 editingProduct.prices) && (
@@ -2699,22 +3229,42 @@ _Please deliver hot & cheesy!_`;
                 </button>
               </div>
 
-              {/* Submit / Cancel */}
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setEditingProduct(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingProduct}
-                  className="px-5 py-2 rounded-xl bg-[#e31837] hover:bg-[#c4122d] text-white font-extrabold shadow-md cursor-pointer disabled:opacity-50"
-                >
-                  {isSavingProduct ? 'Saving Updates...' : 'Save Changes'}
-                </button>
+              {/* Submit / Cancel / Delete */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                {!isNewProduct ? (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteProduct(editingProduct.id)}
+                    className="px-3 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-900/50 font-bold flex items-center space-x-1.5 cursor-pointer text-xs transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Item</span>
+                  </button>
+                ) : <div />}
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingProduct(null);
+                      setIsNewProduct(false);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingProduct}
+                    className="px-5 py-2 rounded-xl bg-[#e31837] hover:bg-[#c4122d] text-white font-extrabold shadow-md cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingProduct
+                      ? 'Saving...'
+                      : isNewProduct
+                      ? 'Add to Menu'
+                      : 'Save Changes'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

@@ -13,6 +13,11 @@ import CartDrawer from '@/components/CartDrawer';
 import BottomNav from '@/components/BottomNav';
 import OrderStatusModal from '@/components/OrderStatusModal';
 import ActiveOrderTracking from '@/components/ActiveOrderTracking';
+import PreLandingPage from '@/components/PreLandingPage';
+import AuthModal from '@/components/AuthModal';
+import CustomPizzaBuilder from '@/components/CustomPizzaBuilder';
+import { useAuth } from '@/context/AuthContext';
+import { useLocation } from '@/context/LocationContext';
 import {
   ProductItem,
   CategoryItem,
@@ -21,14 +26,22 @@ import {
   INITIAL_CATEGORIES,
   INITIAL_BANNERS,
 } from '@/lib/data';
+import { smartSearchProducts } from '@/lib/smartSearch';
 import { useCartStore } from '@/store/cartStore';
-import { Sparkles, Utensils, Award, Info, Heart } from 'lucide-react';
+import { Sparkles, Utensils, Award, Info, Heart, ArrowRight } from 'lucide-react';
 
 import { useSearchParams } from 'next/navigation';
 
 function HomeContent() {
   const searchParams = useSearchParams();
   const trackingParam = searchParams?.get('tracking') === 'true';
+
+  const [hasEnteredApp, setHasEnteredApp] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('7cheese_entered_app') === 'true';
+    }
+    return false;
+  });
 
   const [categories, setCategories] = useState<CategoryItem[]>(INITIAL_CATEGORIES);
   const [products, setProducts] = useState<ProductItem[]>(INITIAL_PRODUCTS);
@@ -43,17 +56,26 @@ function HomeContent() {
   // Modals
   const [customizingProduct, setCustomizingProduct] = useState<ProductItem | null>(null);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isCustomPizzaOpen, setIsCustomPizzaOpen] = useState<boolean>(false);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [isOrderStatusOpen, setIsOrderStatusOpen] = useState<boolean>(false);
   const [recoveredOrderId, setRecoveredOrderId] = useState<string | null>(null);
   const [isViewingTracking, setIsViewingTracking] = useState<boolean>(false);
 
-  const { setDeliveryMode } = useCartStore();
+  const { deliveryMode, setDeliveryMode, addItem } = useCartStore();
+  const { currentUser, userProfile, isLoggedIn } = useAuth();
+  const { locationStatus } = useLocation();
 
-  // Force Delivery mode when on the Home Page
+  // Enforce Firebase Auth after entering app and location selection
   useEffect(() => {
-    setDeliveryMode('Delivery');
-  }, [setDeliveryMode]);
+    if (hasEnteredApp && !isLoggedIn) {
+      const timer = setTimeout(() => {
+        setIsAuthModalOpen(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [hasEnteredApp, currentUser, userProfile, locationStatus]);
 
   // Auto-Recover Order on Page Load (Only auto-open tracking if ?tracking=true was requested)
   useEffect(() => {
@@ -82,26 +104,11 @@ function HomeContent() {
       .catch((err) => console.log('Using pre-populated 7Cheese menu items'));
   }, []);
 
-  // Filtered Products
+  // Smart Search & Filtered Products (Multi-word tokenization, synonyms, fuzzy typos)
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
-      // Category filter
-      if (selectedCategory !== 'all' && product.categorySlug !== selectedCategory) {
-        return false;
-      }
-      // Veg / Non-Veg filter
-      if (vegFilter !== null && product.isVeg !== vegFilter) {
-        return false;
-      }
-      // Search filter
-      if (searchQuery.trim() !== '') {
-        const q = searchQuery.toLowerCase();
-        return (
-          product.name.toLowerCase().includes(q) ||
-          product.description.toLowerCase().includes(q)
-        );
-      }
-      return true;
+    return smartSearchProducts(products, searchQuery, {
+      categoryFilter: selectedCategory,
+      vegFilter,
     });
   }, [products, selectedCategory, vegFilter, searchQuery]);
 
@@ -143,6 +150,20 @@ function HomeContent() {
     }
   };
 
+  // If user has not yet passed the pre-landing screen, show the highlights pre-landing page
+  if (!hasEnteredApp) {
+    return (
+      <PreLandingPage
+        onEnterApp={() => {
+          setHasEnteredApp(true);
+          try {
+            sessionStorage.setItem('7cheese_entered_app', 'true');
+          } catch {}
+        }}
+      />
+    );
+  }
+
   // If user is viewing active order, display the 'Order Tracking / Active Order' UI.
   if (isViewingTracking && recoveredOrderId) {
     return (
@@ -177,11 +198,95 @@ function HomeContent() {
         {/* Dynamic Live Offers & Promos Banner */}
         <OffersBanner onApplyCoupon={() => setIsCartOpen(true)} />
 
+        {/* Returning Customer Welcome Greeting & Previous Order Shortcuts */}
+        {isLoggedIn && userProfile && (
+          <div className="mx-4 mt-2.5 p-3.5 bg-gradient-to-r from-[#002855] to-[#0a386c] text-white rounded-2xl shadow-md border border-blue-400/20 space-y-2 animate-fade-in">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="text-xl">👋</span>
+                <div>
+                  <span className="font-extrabold text-xs block text-amber-300">
+                    Welcome back, {userProfile.name}!
+                  </span>
+                  <span className="text-[10.5px] text-blue-100">
+                    Special VIP discounts automatically active on your cart.
+                  </span>
+                </div>
+              </div>
+              <span className="text-[9.5px] font-black bg-amber-400 text-stone-950 px-2 py-0.5 rounded-full uppercase">
+                Member
+              </span>
+            </div>
+
+            {userProfile.pastOrders && userProfile.pastOrders.length > 0 && (
+              <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
+                <div className="min-w-0 pr-1">
+                  <span className="text-[9.5px] uppercase font-bold text-stone-300 block">
+                    Quick Reorder:
+                  </span>
+                  <p className="text-xs font-bold text-white truncate">
+                    {userProfile.pastOrders[0].itemSummary}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const defaultProd = products[0] || INITIAL_PRODUCTS[0];
+                    addItem({
+                      productId: defaultProd.id,
+                      name: defaultProd.name,
+                      price: defaultProd.price,
+                      basePrice: defaultProd.price,
+                      size: 'Medium',
+                      crust: 'Classic Hand Tossed',
+                      quantity: 1,
+                      image: defaultProd.image,
+                      isVeg: defaultProd.isVeg,
+                    });
+                    setIsCartOpen(true);
+                  }}
+                  className="bg-amber-400 hover:bg-amber-300 active:scale-95 text-stone-950 font-black text-xs px-3 py-1.5 rounded-xl shadow-xs shrink-0 cursor-pointer transition-transform"
+                >
+                  1-Tap Reorder
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Hero Banner Carousel (Domino's Style) */}
         <BannerCarousel
           banners={banners}
           onApplyCoupon={() => setIsCartOpen(true)}
         />
+
+        {/* Module 8: USP FEATURE - MODIFY YOUR PIZZA HERO CARD */}
+        <div className="mx-4 my-2.5 p-3.5 bg-gradient-to-r from-[#1c0f12] via-[#241317] to-[#12080a] border-2 border-red-500/30 rounded-2xl shadow-lg flex items-center justify-between gap-3 text-white">
+          <div className="flex items-center space-x-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#e31837] to-amber-500 flex items-center justify-center text-xl shrink-0 shadow-md">
+              🍕
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center space-x-1.5">
+                <h3 className="font-black text-xs sm:text-sm text-white truncate">Modify Your Pizza</h3>
+                <span className="text-[9px] font-black bg-amber-400 text-stone-950 px-1.5 py-0.2 rounded uppercase">
+                  USP
+                </span>
+              </div>
+              <p className="text-[10.5px] text-stone-300 line-clamp-1">
+                Custom-build step-by-step: slice sizes, crust, sauces &amp; toppings
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsCustomPizzaOpen(true)}
+            className="bg-[#e31837] hover:bg-[#c4122d] active:scale-95 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-md shrink-0 cursor-pointer border border-red-400/40 uppercase tracking-wider transition-all"
+          >
+            Build Now →
+          </button>
+        </div>
 
         {/* Circular Categories List ("What are you craving for?") */}
         <CategoryScroll
@@ -303,6 +408,18 @@ function HomeContent() {
           orderId={activeOrderId}
           isOpen={isOrderStatusOpen}
           onClose={() => setIsOrderStatusOpen(false)}
+        />
+
+        {/* Custom Pizza Builder Modal */}
+        <CustomPizzaBuilder
+          isOpen={isCustomPizzaOpen}
+          onClose={() => setIsCustomPizzaOpen(false)}
+        />
+
+        {/* Enforced Firebase Authentication Modal */}
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
         />
       </div>
     </div>

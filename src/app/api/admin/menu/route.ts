@@ -4,9 +4,10 @@ import {
   getGlobalCategories,
   addGlobalProduct,
   updateGlobalProduct,
+  deleteGlobalProduct,
 } from '@/lib/menuStore';
 import { db } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 export async function GET() {
   const categories = getGlobalCategories();
@@ -88,5 +89,38 @@ export async function PUT(req: Request) {
     return NextResponse.json({ success: true, product: updated });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Failed to update product' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    let id = searchParams.get('id');
+    if (!id) {
+      try {
+        const body = await req.json();
+        id = body.id;
+      } catch (e) {
+        // ignore body parse error if not json
+      }
+    }
+
+    if (!id) {
+      return NextResponse.json({ error: 'Product ID is required' }, { status: 400 });
+    }
+
+    const success = deleteGlobalProduct(id);
+
+    try {
+      if (db) {
+        await deleteDoc(doc(db, 'menu', id));
+      }
+    } catch (fsErr) {
+      console.warn('Firestore menu delete fallback:', fsErr);
+    }
+
+    return NextResponse.json({ success, id });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Failed to delete product' }, { status: 500 });
   }
 }

@@ -16,7 +16,7 @@ export interface CartItem {
 
 interface CartStore {
   items: CartItem[];
-  deliveryMode: 'Delivery' | 'Dine-in';
+  deliveryMode: 'Delivery' | 'Takeaway' | 'Dine-in';
   customerName: string;
   customerPhone: string;
   deliveryAddress: string;
@@ -29,7 +29,7 @@ interface CartStore {
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
-  setDeliveryMode: (mode: 'Delivery' | 'Dine-in') => void;
+  setDeliveryMode: (mode: 'Delivery' | 'Takeaway' | 'Dine-in') => void;
   setCustomerInfo: (info: { name?: string; phone?: string; address?: string; tableNumber?: string }) => void;
   applyCoupon: (code: string) => { success: boolean; message: string };
   removeCoupon: () => void;
@@ -37,9 +37,13 @@ interface CartStore {
   // Computed helpers
   getTotalCount: () => number;
   getSubtotal: () => number;
+  getTierDiscount: () => number;
+  getTierPercentage: () => number;
+  getTotalDiscount: () => number;
   getTaxes: () => number;
   getDeliveryFee: () => number;
   getGrandTotal: () => number;
+  getNextTierInfo: () => { amountNeeded: number; message: string; target: 'delivery' | 'tier1' | 'tier2' | 'max' };
 }
 
 export const useCartStore = create<CartStore>()(
@@ -108,7 +112,6 @@ export const useCartStore = create<CartStore>()(
         }
 
         if (cleanCode === 'TUESDAYFREE') {
-          // Free medium on large pizza or flat ₹150 off if cart > ₹400
           const discount = Math.min(150, Math.round(subtotal * 0.25));
           set({ appliedCoupon: cleanCode, discountAmount: discount });
           return { success: true, message: `Tuesday Treat applied! Saved ₹${discount}` };
@@ -141,19 +144,42 @@ export const useCartStore = create<CartStore>()(
         return get().items.reduce((total, item) => total + item.price * item.quantity, 0);
       },
 
-      getTaxes: () => {
+      // Module 5: 10% off for >= ₹1000, 15% off for >= ₹1500
+      getTierDiscount: () => {
         const subtotal = get().getSubtotal();
-        // 5% GST
-        return Math.round(subtotal * 0.05);
+        if (subtotal >= 1500) {
+          return Math.round(subtotal * 0.15);
+        } else if (subtotal >= 1000) {
+          return Math.round(subtotal * 0.10);
+        }
+        return 0;
       },
 
+      getTierPercentage: () => {
+        const subtotal = get().getSubtotal();
+        if (subtotal >= 1500) return 15;
+        if (subtotal >= 1000) return 10;
+        return 0;
+      },
+
+      getTotalDiscount: () => {
+        return get().getTierDiscount() + get().discountAmount;
+      },
+
+      getTaxes: () => {
+        const subtotal = get().getSubtotal();
+        // 5% GST on post-tier-discount items
+        const taxableAmount = Math.max(0, subtotal - get().getTierDiscount());
+        return Math.round(taxableAmount * 0.05);
+      },
+
+      // Module 5: Free delivery when cart reaches or exceeds ₹299
       getDeliveryFee: () => {
         const { deliveryMode } = get();
         if (deliveryMode !== 'Delivery') return 0;
         const subtotal = get().getSubtotal();
         if (subtotal === 0) return 0;
-        // Free delivery over ₹300, else ₹40
-        return subtotal >= 300 ? 0 : 40;
+        return subtotal >= 299 ? 0 : 40;
       },
 
       getGrandTotal: () => {
@@ -161,8 +187,36 @@ export const useCartStore = create<CartStore>()(
         if (subtotal === 0) return 0;
         const taxes = get().getTaxes();
         const delivery = get().getDeliveryFee();
-        const discount = get().discountAmount;
-        return Math.max(0, subtotal + taxes + delivery - discount);
+        const totalDiscount = get().getTotalDiscount();
+        return Math.max(0, subtotal + taxes + delivery - totalDiscount);
+      },
+
+      getNextTierInfo: () => {
+        const subtotal = get().getSubtotal();
+        if (subtotal < 299) {
+          return {
+            amountNeeded: 299 - subtotal,
+            message: `Add ₹${299 - subtotal} more to unlock FREE Delivery!`,
+            target: 'delivery',
+          };
+        } else if (subtotal < 1000) {
+          return {
+            amountNeeded: 1000 - subtotal,
+            message: `Add ₹${1000 - subtotal} more to get 10% Auto-Discount!`,
+            target: 'tier1',
+          };
+        } else if (subtotal < 1500) {
+          return {
+            amountNeeded: 1500 - subtotal,
+            message: `Add ₹${1500 - subtotal} more to unlock 15% VIP Discount!`,
+            target: 'tier2',
+          };
+        }
+        return {
+          amountNeeded: 0,
+          message: '🎉 15% VIP Discount + FREE Delivery Unlocked!',
+          target: 'max',
+        };
       },
     }),
     {

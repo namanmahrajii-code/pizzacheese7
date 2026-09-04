@@ -20,7 +20,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   onSelectCategory,
 }) => {
   const pathname = usePathname();
-  const isDineIn = pathname?.startsWith('/dine-in');
+  const isDineIn = pathname?.startsWith('/dine-in') || pathname?.startsWith('/din-in');
 
   return (
     <div

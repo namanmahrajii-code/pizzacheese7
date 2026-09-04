@@ -20,8 +20,10 @@ import {
   ShoppingBag,
   Sparkles,
   ArrowLeft,
+  Star,
 } from 'lucide-react';
 import { STORE_LOCATION } from '@/lib/constants';
+import FeedbackModal from './FeedbackModal';
 
 interface OrderItem {
   id: string;
@@ -89,7 +91,17 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
 
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState<boolean>(false);
+  const [hasTriggeredFeedback, setHasTriggeredFeedback] = useState<boolean>(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-open feedback modal when order transitions to Delivered/Completed
+  useEffect(() => {
+    if (order && (order.status === 'Delivered' || order.status === 'Completed') && !hasTriggeredFeedback) {
+      setIsFeedbackOpen(true);
+      setHasTriggeredFeedback(true);
+    }
+  }, [order?.status, hasTriggeredFeedback]);
 
   // Poll server API every 3s to guarantee live updates even if Firestore websockets are offline
   useEffect(() => {
@@ -371,7 +383,7 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
                 </p>
               </div>
             ) : order?.status === 'Delivered' || order?.status === 'Completed' ? (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 text-center space-y-2 animate-scale-in">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 text-center space-y-3 animate-scale-in">
                 <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-xl">
                   🎉
                 </div>
@@ -379,6 +391,16 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
                 <p className="text-xs text-emerald-700">
                   Enjoy your hot, cheesy handcrafted meal! We hope to serve you again soon.
                 </p>
+
+                {/* Rating & Feedback Trigger CTA */}
+                <button
+                  type="button"
+                  onClick={() => setIsFeedbackOpen(true)}
+                  className="mt-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all flex items-center justify-center space-x-1.5 mx-auto cursor-pointer"
+                >
+                  <Star className="w-3.5 h-3.5 fill-white" />
+                  <span>Rate Your Meal &amp; Share Feedback</span>
+                </button>
               </div>
             ) : (
               <div className="bg-gradient-to-r from-red-50 to-amber-50 border border-red-100 rounded-3xl p-5 space-y-3 shadow-xs">
@@ -627,6 +649,17 @@ export const ActiveOrderTracking: React.FC<ActiveOrderTrackingProps> = ({
           )}
         </footer>
       </div>
+
+      {/* Moderated Feedback Modal */}
+      {order && (
+        <FeedbackModal
+          orderId={order.id}
+          customerName={(order as any).customerName || 'Valued Customer'}
+          customerPhone={(order as any).customerPhone || ''}
+          isOpen={isFeedbackOpen}
+          onClose={() => setIsFeedbackOpen(false)}
+        />
+      )}
     </div>
   );
 };

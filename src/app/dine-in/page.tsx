@@ -19,6 +19,7 @@ import {
   INITIAL_CATEGORIES,
   INITIAL_BANNERS,
 } from '@/lib/data';
+import { smartSearchProducts } from '@/lib/smartSearch';
 import { useCartStore } from '@/store/cartStore';
 import { Sparkles, Utensils, UtensilsCrossed } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
@@ -84,23 +85,11 @@ function DineInContent() {
       .catch((err) => console.log('Using pre-populated 7Cheese menu items'));
   }, []);
 
-  // Filtered Products
+  // Smart Search & Filtered Products (Multi-word tokenization, synonyms, fuzzy typos)
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
-      if (selectedCategory !== 'all' && product.categorySlug !== selectedCategory) {
-        return false;
-      }
-      if (vegFilter !== null && product.isVeg !== vegFilter) {
-        return false;
-      }
-      if (searchQuery.trim() !== '') {
-        const q = searchQuery.toLowerCase();
-        return (
-          product.name.toLowerCase().includes(q) ||
-          product.description.toLowerCase().includes(q)
-        );
-      }
-      return true;
+    return smartSearchProducts(products, searchQuery, {
+      categoryFilter: selectedCategory,
+      vegFilter,
     });
   }, [products, selectedCategory, vegFilter, searchQuery]);
 
