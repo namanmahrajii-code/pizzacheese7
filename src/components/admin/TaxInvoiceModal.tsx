@@ -225,82 +225,218 @@ export default function TaxInvoiceModal({
     setIsEditing(false);
   };
 
+  const buildPrintHtml = () => {
+    // Standalone print document: browser prints this (not the dashboard
+    // page) so backdrop-blur / fixed-overlay print bugs can't blank it.
+    // ₹ is fine here — the glyph problem only exists in jsPDF fonts.
+    const isKot = slipMode === 'kot';
+    const rows = slipData.items
+      .map(
+        (it) => `
+        <tr>
+          <td><strong>${it.name}</strong></td>
+          <td>${it.size}${it.crust ? ` &bull; ${it.crust}` : ''}</td>
+          <td class="c"><strong>${it.quantity}</strong></td>
+          <td class="r">₹${it.price}</td>
+          <td class="r"><strong>₹${it.quantity * it.price}</strong></td>
+        </tr>`
+      )
+      .join('');
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>${isKot ? 'KOT' : 'Tax_Invoice'}_${slipData.invoiceNumber}</title>
+  <style>
+    @page { margin: 12mm; size: A4; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; color: #111; background: #fff; }
+    .slip { border: 1.5px solid #222; padding: 28px 30px; }
+    .header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2.5px solid #222; padding-bottom: 14px; margin-bottom: 18px; }
+    .brand { font-size: 28px; font-weight: 900; letter-spacing: 0.5px; }
+    .sub { font-size: 12px; color: #444; margin-top: 2px; }
+    .meta { text-align: right; font-size: 13px; white-space: nowrap; }
+    .meta .title { font-size: 17px; font-weight: 900; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 14px 0; border-bottom: 1px solid #222; font-size: 13px; line-height: 1.65; }
+    table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px; }
+    th { text-align: left; padding: 10px 6px; border-bottom: 2px solid #222; font-size: 11px; text-transform: uppercase; color: #333; }
+    td { padding: 11px 6px; border-bottom: 1px solid #e5e5e5; }
+    td.c, th.c { text-align: center; }
+    td.r, th.r { text-align: right; }
+    .bottom { display: flex; justify-content: space-between; gap: 20px; margin-top: 6px; }
+    .notes { font-size: 12px; font-style: italic; color: #333; max-width: 55%; }
+    .totals { width: 270px; font-size: 13px; margin-left: auto; }
+    .total-row { display: flex; justify-content: space-between; padding: 5px 0; }
+    .grand { font-size: 19px; font-weight: 900; border-top: 2px solid #222; padding-top: 8px; margin-top: 6px; }
+    .footer { text-align: center; margin-top: 34px; font-size: 11px; color: #444; border-top: 1px dashed #999; padding-top: 14px; }
+    .barcode { font-family: monospace; font-size: 15px; letter-spacing: 3px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="slip">
+    <div class="header">
+      <div>
+        <div class="brand">${slipData.restaurantName}</div>
+        <div class="sub">${slipData.legalEntity}</div>
+        <div class="sub">${slipData.storeAddress}</div>
+        <div class="sub">GSTIN: ${slipData.gstin} | FSSAI: ${slipData.fssai}</div>
+      </div>
+      <div class="meta">
+        <div class="title">${isKot ? 'KITCHEN ORDER TICKET' : 'OFFICIAL TAX INVOICE'}</div>
+        <div>${slipData.invoiceNumber}</div>
+        <div>${slipData.dateStr}</div>
+        <div><strong>${slipData.orderType === 'Dine-in' ? `TABLE #${slipData.tableNumber}` : 'HOME DELIVERY'}</strong></div>
+      </div>
+    </div>
+    <div class="grid">
+      <div>
+        <strong>${slipData.orderType === 'Dine-in' ? 'GUEST & TABLE INFO' : 'BILLED / DELIVERED TO:'}</strong><br/>
+        ${slipData.customerName}<br/>
+        Phone: ${slipData.customerPhone}<br/>
+        ${slipData.destinationAddress}
+      </div>
+      <div>
+        <strong>${slipData.orderType === 'Dine-in' ? 'SERVICE STATION' : 'DISPATCH & PAYMENT:'}</strong><br/>
+        Service: ${slipData.dispatchPartner}<br/>
+        Payment: ${slipData.paymentMode}<br/>
+        Status: ${slipData.orderStatus}
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Item Description</th>
+          <th>Size / Variant</th>
+          <th class="c">Qty</th>
+          <th class="r">Price</th>
+          <th class="r">Total</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="bottom">
+      <div class="notes">${slipData.specialInstructions ? `"${slipData.specialInstructions}"` : ''}</div>
+      <div class="totals">
+        <div class="total-row"><span>Subtotal:</span><span>₹${itemsSubtotal}</span></div>
+        ${slipData.packagingDeliveryFee > 0 ? `<div class="total-row"><span>Delivery / Packaging:</span><span>₹${slipData.packagingDeliveryFee}</span></div>` : ''}
+        <div class="total-row"><span>GST (${slipData.gstPercent}%):</span><span>₹${gstAmount}</span></div>
+        ${slipData.discount > 0 ? `<div class="total-row"><span>Discount:</span><span>-₹${slipData.discount}</span></div>` : ''}
+        <div class="total-row grand"><span>Grand Total:</span><span>₹${grandTotal}</span></div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>${slipData.footerNote}</div>
+      <div class="barcode">|||| ||||| || |||||| ||||| ||||</div>
+      <div>This is a computer-generated invoice.</div>
+    </div>
+  </div>
+</body>
+</html>`;
+  };
+
   const handlePrint = () => {
-    window.print();
+    // Print the standalone invoice document via a hidden iframe instead of
+    // window.print() on the dashboard: the modal lives inside a fixed
+    // backdrop-blur overlay which Chrome prints as a blank page.
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText =
+      'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(iframe);
+    const frameDoc =
+      iframe.contentDocument || iframe.contentWindow?.document || null;
+    if (!frameDoc || !iframe.contentWindow) {
+      document.body.removeChild(iframe);
+      window.print();
+      return;
+    }
+    frameDoc.open();
+    frameDoc.write(buildPrintHtml());
+    frameDoc.close();
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+    setTimeout(() => {
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    }, 1500);
   };
 
   const handleDownloadSlip = async () => {
-    // Generate PDF directly (no HTML download) using jsPDF text layout.
-    // Manual text layout used instead of html2canvas: Tailwind v4 oklch
-    // colors break canvas capture, standard jsPDF fonts also lack ₹ glyph
-    // so "Rs." is used throughout the PDF.
+    // A4 full-page PDF (no HTML download) using jsPDF manual text layout.
+    // Manual layout: Tailwind v4 oklch colors break html2canvas capture,
+    // standard jsPDF fonts lack ₹ glyph so "Rs." is used throughout.
+    // Row padding auto-expands + footer pinned to bottom so a short bill
+    // fills the full A4 page instead of leaving half the page empty.
     const { jsPDF } = await import('jspdf');
     const isKot = slipMode === 'kot';
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 14;
-    const usableWidth = pageWidth - margin * 2;
-    let y = 16;
+    const left = 16;
+    const right = pageWidth - 16;
+    const usableWidth = right - left;
+    const FOOTER_TOP = 258;
+    let y = 22;
 
     const ensureSpace = (needed: number) => {
-      if (y + needed > 280) {
+      if (y + needed > 252) {
         doc.addPage();
-        y = 16;
+        y = 20;
       }
-    };
-    const sectionGap = (gap = 4) => {
-      y += gap;
     };
 
     // Header
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.text(slipData.restaurantName || '7CHEESE PIZZA', margin, y);
-    y += 6;
-    doc.setFontSize(9);
+    doc.setFontSize(24);
+    doc.text(slipData.restaurantName || '7CHEESE PIZZA', left, y);
+    y += 9;
+    doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    doc.text(slipData.legalEntity || '', margin, y);
-    y += 4;
-    const addressLines = doc.splitTextToSize(slipData.storeAddress || '', usableWidth * 0.6);
-    doc.text(addressLines, margin, y);
-    y += addressLines.length * 4;
-    doc.setFontSize(8);
-    doc.text(`GSTIN: ${slipData.gstin || '-'}  |  FSSAI: ${slipData.fssai || '-'}`, margin, y);
-    y += 6;
+    doc.text(slipData.legalEntity || '', left, y);
+    y += 5.5;
+    doc.setFontSize(10);
+    const addressLines = doc.splitTextToSize(slipData.storeAddress || '', 108);
+    doc.text(addressLines, left, y);
+    y += addressLines.length * 4.8;
+    doc.setFontSize(9);
+    doc.text(`GSTIN: ${slipData.gstin || '-'}  |  FSSAI: ${slipData.fssai || '-'}`, left, y);
+    y += 7;
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.text(
       isKot ? 'KITCHEN ORDER TICKET' : 'OFFICIAL TAX INVOICE',
-      pageWidth - margin,
-      16,
+      right,
+      22,
       { align: 'right' }
     );
-    doc.setFontSize(9);
+    doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    doc.text(slipData.invoiceNumber || '', pageWidth - margin, 22, { align: 'right' });
-    doc.text(slipData.dateStr || '', pageWidth - margin, 27, { align: 'right' });
+    doc.text(slipData.invoiceNumber || '', right, 29, { align: 'right' });
+    doc.setFontSize(10);
+    doc.text(slipData.dateStr || '', right, 35, { align: 'right' });
     doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
     doc.text(
       slipData.orderType === 'Dine-in' ? `TABLE #${slipData.tableNumber}` : 'HOME DELIVERY',
-      pageWidth - margin,
-      32,
+      right,
+      41,
       { align: 'right' }
     );
-    y = Math.max(y, 38);
+    y = Math.max(y, 48);
 
     doc.setDrawColor(30);
-    doc.line(margin, y, pageWidth - margin, y);
-    sectionGap(5);
+    doc.setLineWidth(0.8);
+    doc.line(left, y, right, y);
+    doc.setLineWidth(0.2);
+    y += 7;
 
     // Parties
-    doc.setFontSize(9);
+    doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
-    doc.text(slipData.orderType === 'Dine-in' ? 'GUEST & TABLE INFO' : 'BILLED / DELIVERED TO:', margin, y);
+    doc.text(slipData.orderType === 'Dine-in' ? 'GUEST & TABLE INFO' : 'BILLED / DELIVERED TO:', left, y);
     doc.text(slipData.orderType === 'Dine-in' ? 'SERVICE STATION' : 'DISPATCH & PAYMENT:', pageWidth / 2 + 4, y);
-    y += 5;
+    y += 6;
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
+    doc.setFontSize(11);
     const leftBlock = [
       slipData.customerName || '',
       `Phone: ${slipData.customerPhone || 'N/A'}`,
@@ -311,100 +447,148 @@ export default function TaxInvoiceModal({
       `Payment: ${slipData.paymentMode || ''}`,
       `Status: ${slipData.orderStatus || ''}`,
     ];
-    const blockHeight = Math.max(leftBlock.length, rightBlock.length) * 4.5;
+    const blockHeight = Math.max(leftBlock.length, rightBlock.length) * 6;
     ensureSpace(blockHeight + 4);
-    doc.text(leftBlock, margin, y);
+    doc.text(leftBlock, left, y);
     doc.text(rightBlock, pageWidth / 2 + 4, y);
-    y += blockHeight + 3;
-    doc.line(margin, y, pageWidth - margin, y);
-    sectionGap(5);
+    y += blockHeight + 4;
+    doc.line(left, y, right, y);
+    y += 7;
+
+    // Items table: measure rows first, then expand row padding so a short
+    // bill stretches down the page instead of ending halfway.
+    const colX = [left, left + 80, left + 120, left + 140];
+    const nameW = 74;
+    const variantW = 36;
+    const measuredRows = slipData.items.map((it) => {
+      const nameLines = doc.splitTextToSize(it.name || 'Item', nameW);
+      const variantLines = doc.splitTextToSize(
+        `${it.size || ''}${it.crust ? ` - ${it.crust}` : ''}`,
+        variantW
+      );
+      return {
+        it,
+        nameLines,
+        variantLines,
+        natural: Math.max(nameLines.length, variantLines.length) * 5 + 4,
+      };
+    });
+    const totalsLineCount =
+      2 + (slipData.packagingDeliveryFee > 0 ? 1 : 0) + (slipData.discount > 0 ? 1 : 0);
+    const totalsH = totalsLineCount * 7 + 13;
+    const notesH = slipData.specialInstructions
+      ? doc.splitTextToSize(slipData.specialInstructions, usableWidth).length * 4.8 + 12
+      : 0;
+    const rowsStartY = y + 12;
+    const contentBottom = 250;
+    const naturalRowsH = measuredRows.reduce((sum, r) => sum + r.natural, 0);
+    const freeSpace =
+      contentBottom - rowsStartY - naturalRowsH - totalsH - notesH - 14;
+    const extraPerRow =
+      measuredRows.length > 0 ? Math.min(22, Math.max(0, freeSpace / measuredRows.length)) : 0;
 
     // Items table header
-    const colX = [margin, margin + 78, margin + 118, margin + 134, margin + 156];
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(10);
     doc.text('ITEM', colX[0], y);
     doc.text('SIZE / CRUST', colX[1], y);
     doc.text('QTY', colX[2], y);
     doc.text('PRICE', colX[3], y, { align: 'right' });
-    doc.text('TOTAL', pageWidth - margin, y, { align: 'right' });
-    y += 2;
+    doc.text('TOTAL', right, y, { align: 'right' });
+    y += 3;
     doc.setDrawColor(180);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 5;
+    doc.line(left, y, right, y);
+    y += 7;
 
     // Items rows
-    doc.setFont('helvetica', 'normal');
-    slipData.items.forEach((it) => {
-      const nameLines = doc.splitTextToSize(it.name || 'Item', 72);
-      const variantLines = doc.splitTextToSize(
-        `${it.size || ''}${it.crust ? ` - ${it.crust}` : ''}`,
-        36
-      );
-      const rowHeight = Math.max(nameLines.length, variantLines.length) * 4 + 2;
-      ensureSpace(rowHeight + 2);
+    measuredRows.forEach(({ it, nameLines, variantLines, natural }) => {
+      const rowHeight = natural + extraPerRow;
+      ensureSpace(rowHeight + 3);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
       doc.text(nameLines, colX[0], y);
-      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
       doc.text(variantLines, colX[1], y);
-      doc.setFontSize(8);
+      doc.setFontSize(11);
       doc.text(String(it.quantity), colX[2], y);
       doc.text(`Rs.${it.price}`, colX[3], y, { align: 'right' });
       doc.setFont('helvetica', 'bold');
-      doc.text(`Rs.${it.quantity * it.price}`, pageWidth - margin, y, { align: 'right' });
+      doc.text(`Rs.${it.quantity * it.price}`, right, y, { align: 'right' });
       doc.setFont('helvetica', 'normal');
       y += rowHeight;
     });
     doc.setDrawColor(180);
-    doc.line(margin, y, pageWidth - margin, y);
-    sectionGap(5);
+    doc.line(left, y, right, y);
+    y += 7;
 
     // Totals (right aligned)
-    ensureSpace(30);
-    doc.setFontSize(9);
-    const totalRight = pageWidth - margin;
-    const totalLabelX = totalRight - 62;
+    ensureSpace(34);
+    doc.setFontSize(11);
+    const totalLabelX = right - 70;
     doc.text('Subtotal:', totalLabelX, y);
-    doc.text(`Rs.${itemsSubtotal}`, totalRight, y, { align: 'right' });
-    y += 5;
+    doc.text(`Rs.${itemsSubtotal}`, right, y, { align: 'right' });
+    y += 7;
     if (slipData.packagingDeliveryFee > 0) {
       doc.text('Delivery / Packaging:', totalLabelX, y);
-      doc.text(`Rs.${slipData.packagingDeliveryFee}`, totalRight, y, { align: 'right' });
-      y += 5;
+      doc.text(`Rs.${slipData.packagingDeliveryFee}`, right, y, { align: 'right' });
+      y += 7;
     }
     doc.text(`GST (${slipData.gstPercent}%):`, totalLabelX, y);
-    doc.text(`Rs.${gstAmount}`, totalRight, y, { align: 'right' });
-    y += 5;
+    doc.text(`Rs.${gstAmount}`, right, y, { align: 'right' });
+    y += 7;
     if (slipData.discount > 0) {
       doc.text('Discount:', totalLabelX, y);
-      doc.text(`-Rs.${slipData.discount}`, totalRight, y, { align: 'right' });
-      y += 5;
+      doc.text(`-Rs.${slipData.discount}`, right, y, { align: 'right' });
+      y += 7;
     }
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
+    doc.setFontSize(15);
     doc.text('Grand Total:', totalLabelX, y);
-    doc.text(`Rs.${grandTotal}`, totalRight, y, { align: 'right' });
+    doc.text(`Rs.${grandTotal}`, right, y, { align: 'right' });
     doc.setFont('helvetica', 'normal');
-    sectionGap(6);
+    y += 8;
 
-    // Notes + footer
+    // Notes
     if (slipData.specialInstructions) {
-      ensureSpace(12);
-      doc.setFontSize(8);
-      doc.text('Notes:', margin, y);
-      y += 4;
+      ensureSpace(14);
+      doc.setFontSize(10);
+      doc.text('Notes:', left, y);
+      y += 5;
       const noteLines = doc.splitTextToSize(slipData.specialInstructions, usableWidth);
-      doc.text(noteLines, margin, y);
-      y += noteLines.length * 4 + 3;
+      doc.text(noteLines, left, y);
+      y += noteLines.length * 4.8 + 4;
     }
-    ensureSpace(12);
+
+    // Footer pinned to page bottom on single-page bills so no half-empty page.
+    const singlePage = doc.getNumberOfPages() === 1;
+    if (singlePage && y < FOOTER_TOP - 16) {
+      y = FOOTER_TOP;
+    } else {
+      ensureSpace(22);
+    }
     doc.setDrawColor(150);
     doc.setLineDashPattern([2, 2], 0);
-    doc.line(margin, y, pageWidth - margin, y);
+    doc.line(left, y, right, y);
     doc.setLineDashPattern([], 0);
-    y += 5;
-    doc.setFontSize(8);
+    y += 6;
+    doc.setFontSize(9);
     const footerLines = doc.splitTextToSize(slipData.footerNote || '', usableWidth);
     doc.text(footerLines, pageWidth / 2, y, { align: 'center' });
+    y += footerLines.length * 4.2 + 3;
+    doc.setFontSize(10);
+    doc.text('|| |||| | ||||| || || ||||| | ||||', pageWidth / 2, y, { align: 'center' });
+    y += 5;
+    doc.setFontSize(8);
+    doc.text('This is a computer-generated invoice.', pageWidth / 2, y, { align: 'center' });
+
+    // Full-page frame on single-page bills for a proper A4 invoice look.
+    if (singlePage) {
+      doc.setDrawColor(30);
+      doc.setLineWidth(0.5);
+      doc.rect(10, 10, pageWidth - 20, 277);
+      doc.setLineWidth(0.2);
+    }
 
     doc.save(`${isKot ? 'KOT' : 'Tax_Invoice'}_${slipData.invoiceNumber}.pdf`);
   };
