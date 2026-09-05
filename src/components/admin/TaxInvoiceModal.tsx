@@ -250,27 +250,27 @@ export default function TaxInvoiceModal({
     @page { margin: 5mm; }
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .slip { width: 70mm; max-width: 100%; margin: 0 auto; color: #000; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+    .slip { width: 70mm; max-width: 100%; margin: 0 auto; color: #000; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
     .c { text-align: center; }
-    .brand { font-size: 22px; font-weight: 900; letter-spacing: 0.5px; }
-    .sub { font-size: 11px; margin-top: 1px; }
-    .title { font-size: 15px; font-weight: 900; margin-top: 6px; }
-    .meta { font-size: 12px; }
+    .brand { font-size: 24px; font-weight: 900; letter-spacing: 0.5px; }
+    .sub { font-size: 12px; margin-top: 1px; }
+    .title { font-size: 16px; font-weight: 900; margin-top: 6px; }
+    .meta { font-size: 13px; }
     .sep { border-top: 1.5px dashed #000; margin: 7px 0; }
-    .sec { font-size: 11px; font-weight: 900; text-transform: uppercase; }
-    .row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; font-size: 13px; }
+    .sec { font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; font-size: 14px; }
     .row > span:first-child { min-width: 0; }
     .row .r { white-space: nowrap; margin-left: auto; }
     .item { margin: 5px 0; break-inside: avoid; }
-    .iname { font-size: 13px; font-weight: 700; }
-    .ivariant { font-size: 11px; }
-    .iline { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; font-size: 12px; }
+    .iname { font-size: 14px; font-weight: 700; }
+    .ivariant { font-size: 12px; }
+    .iline { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; font-size: 13px; }
     .iline > span:first-child { min-width: 0; }
     .iline .r { white-space: nowrap; font-weight: 700; margin-left: auto; }
-    .notes { font-size: 11px; font-style: italic; }
-    .grand { border: 2px solid #000; padding: 5px 7px; margin-top: 6px; font-size: 19px; font-weight: 900; break-inside: avoid; }
-    .footer { font-size: 11px; }
-    .barcode { font-family: monospace; font-size: 13px; letter-spacing: 2px; margin-top: 5px; }
+    .notes { font-size: 12px; font-style: italic; }
+    .grand { border: 2px solid #000; padding: 5px 7px; margin-top: 6px; font-size: 21px; font-weight: 900; break-inside: avoid; }
+    .footer { font-size: 12px; }
+    .barcode { font-family: monospace; font-size: 14px; letter-spacing: 2px; margin-top: 5px; }
   </style>
 </head>
 <body>
