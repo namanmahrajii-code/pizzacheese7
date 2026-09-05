@@ -250,25 +250,25 @@ export default function TaxInvoiceModal({
     @page { margin: 4mm; }
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .slip { width: 72mm; max-width: 100%; margin: 0 auto; color: #000; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+    .slip { width: 72mm; max-width: 100%; margin: 0 auto; color: #000; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
     .c { text-align: center; }
-    .brand { font-size: 22px; font-weight: 900; letter-spacing: 0.5px; }
-    .sub { font-size: 11px; margin-top: 1px; }
-    .title { font-size: 15px; font-weight: 900; margin-top: 6px; }
-    .meta { font-size: 12px; }
+    .brand { font-size: 20px; font-weight: 900; letter-spacing: 0.5px; }
+    .sub { font-size: 10px; margin-top: 1px; }
+    .title { font-size: 14px; font-weight: 900; margin-top: 6px; }
+    .meta { font-size: 11px; }
     .sep { border-top: 1.5px dashed #000; margin: 7px 0; }
-    .sec { font-size: 11px; font-weight: 900; text-transform: uppercase; }
-    .row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+    .sec { font-size: 10px; font-weight: 900; text-transform: uppercase; }
+    .row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
     .row .r { white-space: nowrap; }
     .item { margin: 5px 0; break-inside: avoid; }
-    .iname { font-size: 13px; font-weight: 700; }
-    .ivariant { font-size: 11px; }
-    .iline { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+    .iname { font-size: 12px; font-weight: 700; }
+    .ivariant { font-size: 10px; }
+    .iline { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; }
     .iline .r { white-space: nowrap; font-weight: 700; }
-    .notes { font-size: 11px; font-style: italic; }
-    .grand { border: 2px solid #000; padding: 5px 7px; margin-top: 6px; font-size: 19px; font-weight: 900; break-inside: avoid; }
-    .footer { font-size: 11px; }
-    .barcode { font-family: monospace; font-size: 13px; letter-spacing: 2px; margin-top: 5px; }
+    .notes { font-size: 10px; font-style: italic; }
+    .grand { border: 2px solid #000; padding: 5px 7px; margin-top: 6px; font-size: 17px; font-weight: 900; break-inside: avoid; }
+    .footer { font-size: 10px; }
+    .barcode { font-family: monospace; font-size: 12px; letter-spacing: 2px; margin-top: 5px; }
   </style>
 </head>
 <body>
