@@ -250,26 +250,26 @@ export default function TaxInvoiceModal({
   <style>
     @page { margin: 10mm; size: A4; }
     * { box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; color: #111; background: #fff; }
-    .slip { border: 2px solid #222; padding: 34px 36px; }
-    .header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #222; padding-bottom: 16px; margin-bottom: 22px; }
-    .brand { font-size: 40px; font-weight: 900; letter-spacing: 0.5px; }
-    .sub { font-size: 15px; color: #444; margin-top: 3px; }
-    .meta { text-align: right; font-size: 16px; white-space: nowrap; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .slip { border: 2.5px solid #000; padding: 30px 32px; }
+    .header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #000; padding-bottom: 14px; margin-bottom: 20px; }
+    .brand { font-size: 40px; font-weight: 900; letter-spacing: 0.5px; color: #000; }
+    .sub { font-size: 15px; color: #000; margin-top: 3px; }
+    .meta { text-align: right; font-size: 16px; white-space: nowrap; color: #000; }
     .meta .title { font-size: 22px; font-weight: 900; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 18px 0; border-bottom: 1px solid #222; font-size: 16px; line-height: 1.7; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 18px 0; border-bottom: 2px solid #000; font-size: 16px; line-height: 1.7; color: #000; }
     .tablewrap { margin: 22px 0; }
-    table { width: 100%; border-collapse: collapse; font-size: 16px; }
-    th { text-align: left; padding: 13px 8px; border-bottom: 2px solid #222; font-size: 13px; text-transform: uppercase; color: #333; }
-    td { padding: 16px 8px; border-bottom: 1px solid #e5e5e5; }
+    table { width: 100%; border-collapse: collapse; font-size: 16px; color: #000; }
+    th { text-align: left; padding: 13px 8px; border-bottom: 2px solid #000; font-size: 13px; text-transform: uppercase; color: #000; }
+    td { padding: 16px 8px; border-bottom: 1px solid #000; color: #000; }
     td.c, th.c { text-align: center; }
     td.r, th.r { text-align: right; }
     .bottom { display: flex; justify-content: space-between; gap: 20px; margin-top: 10px; margin-bottom: 34px; }
-    .notes { font-size: 15px; font-style: italic; color: #333; max-width: 55%; }
-    .totals { width: 320px; font-size: 16px; margin-left: auto; }
+    .notes { font-size: 15px; font-style: italic; color: #000; max-width: 55%; }
+    .totals { width: 320px; font-size: 16px; margin-left: auto; color: #000; }
     .total-row { display: flex; justify-content: space-between; padding: 7px 0; }
-    .grand { font-size: 28px; font-weight: 900; border-top: 2px solid #222; padding-top: 10px; margin-top: 8px; }
-    .footer { text-align: center; margin-top: 36px; font-size: 13px; color: #444; border-top: 1px dashed #999; padding-top: 18px; }
+    .grand { font-size: 26px; font-weight: 900; border: 2.5px solid #000; padding: 8px 10px; margin-top: 10px; }
+    .footer { text-align: center; margin-top: 36px; font-size: 13px; color: #000; border-top: 2px solid #000; padding-top: 18px; }
     .barcode { font-family: monospace; font-size: 20px; letter-spacing: 3px; margin-top: 10px; }
     tr, .totals, .footer { break-inside: avoid; }
   </style>
