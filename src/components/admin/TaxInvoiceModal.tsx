@@ -248,28 +248,29 @@ export default function TaxInvoiceModal({
   <meta charset="UTF-8" />
   <title>${isKot ? 'KOT' : 'Tax_Invoice'}_${slipData.invoiceNumber}</title>
   <style>
-    @page { margin: 12mm; size: A4; }
+    @page { margin: 10mm; size: A4; }
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; color: #111; background: #fff; }
-    .slip { border: 1.5px solid #222; padding: 28px 30px; }
-    .header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2.5px solid #222; padding-bottom: 14px; margin-bottom: 18px; }
-    .brand { font-size: 28px; font-weight: 900; letter-spacing: 0.5px; }
-    .sub { font-size: 12px; color: #444; margin-top: 2px; }
-    .meta { text-align: right; font-size: 13px; white-space: nowrap; }
-    .meta .title { font-size: 17px; font-weight: 900; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 14px 0; border-bottom: 1px solid #222; font-size: 13px; line-height: 1.65; }
-    table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px; }
-    th { text-align: left; padding: 10px 6px; border-bottom: 2px solid #222; font-size: 11px; text-transform: uppercase; color: #333; }
-    td { padding: 11px 6px; border-bottom: 1px solid #e5e5e5; }
+    .slip { border: 2px solid #222; padding: 32px 34px; min-height: 270mm; display: flex; flex-direction: column; }
+    .header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #222; padding-bottom: 16px; margin-bottom: 20px; }
+    .brand { font-size: 36px; font-weight: 900; letter-spacing: 0.5px; }
+    .sub { font-size: 14px; color: #444; margin-top: 3px; }
+    .meta { text-align: right; font-size: 15px; white-space: nowrap; }
+    .meta .title { font-size: 21px; font-weight: 900; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 16px 0; border-bottom: 1px solid #222; font-size: 15px; line-height: 1.7; }
+    .tablewrap { margin: 20px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 15px; }
+    th { text-align: left; padding: 12px 8px; border-bottom: 2px solid #222; font-size: 12px; text-transform: uppercase; color: #333; }
+    td { padding: 14px 8px; border-bottom: 1px solid #e5e5e5; }
     td.c, th.c { text-align: center; }
     td.r, th.r { text-align: right; }
-    .bottom { display: flex; justify-content: space-between; gap: 20px; margin-top: 6px; }
-    .notes { font-size: 12px; font-style: italic; color: #333; max-width: 55%; }
-    .totals { width: 270px; font-size: 13px; margin-left: auto; }
-    .total-row { display: flex; justify-content: space-between; padding: 5px 0; }
-    .grand { font-size: 19px; font-weight: 900; border-top: 2px solid #222; padding-top: 8px; margin-top: 6px; }
-    .footer { text-align: center; margin-top: 34px; font-size: 11px; color: #444; border-top: 1px dashed #999; padding-top: 14px; }
-    .barcode { font-family: monospace; font-size: 15px; letter-spacing: 3px; margin-top: 8px; }
+    .bottom { display: flex; justify-content: space-between; gap: 20px; margin-top: 8px; margin-bottom: 30px; }
+    .notes { font-size: 14px; font-style: italic; color: #333; max-width: 55%; }
+    .totals { width: 300px; font-size: 15px; margin-left: auto; }
+    .total-row { display: flex; justify-content: space-between; padding: 6px 0; }
+    .grand { font-size: 24px; font-weight: 900; border-top: 2px solid #222; padding-top: 10px; margin-top: 8px; }
+    .footer { margin-top: auto; text-align: center; font-size: 12px; color: #444; border-top: 1px dashed #999; padding-top: 16px; }
+    .barcode { font-family: monospace; font-size: 18px; letter-spacing: 3px; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -302,6 +303,7 @@ export default function TaxInvoiceModal({
         Status: ${slipData.orderStatus}
       </div>
     </div>
+    <div class="tablewrap">
     <table>
       <thead>
         <tr>
@@ -312,8 +314,9 @@ export default function TaxInvoiceModal({
           <th class="r">Total</th>
         </tr>
       </thead>
-      <tbody>${rows}</tbody>
+      <tbody>${rows}      </tbody>
     </table>
+    </div>
     <div class="bottom">
       <div class="notes">${slipData.specialInstructions ? `"${slipData.specialInstructions}"` : ''}</div>
       <div class="totals">
