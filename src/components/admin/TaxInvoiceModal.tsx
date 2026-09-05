@@ -226,20 +226,19 @@ export default function TaxInvoiceModal({
   };
 
   const buildPrintHtml = () => {
-    // Standalone print document: browser prints this (not the dashboard
-    // page) so backdrop-blur / fixed-overlay print bugs can't blank it.
-    // ₹ is fine here — the glyph problem only exists in jsPDF fonts.
+    // 80mm thermal-receipt style print document (fits 80mm roll / narrow
+    // slip). Single-column stacked layout + overflow-wrap so nothing can
+    // spill off the right edge. ₹ is fine here — the glyph problem only
+    // exists in jsPDF fonts.
     const isKot = slipMode === 'kot';
     const rows = slipData.items
       .map(
         (it) => `
-        <tr>
-          <td><strong>${it.name}</strong></td>
-          <td>${it.size}${it.crust ? ` &bull; ${it.crust}` : ''}</td>
-          <td class="c"><strong>${it.quantity}</strong></td>
-          <td class="r">₹${it.price}</td>
-          <td class="r"><strong>₹${it.quantity * it.price}</strong></td>
-        </tr>`
+        <div class="item">
+          <div class="iname">${it.name}</div>
+          <div class="ivariant">${it.size}${it.crust ? ` | ${it.crust}` : ''}</div>
+          <div class="iline"><span>${it.quantity} x ₹${it.price}</span><span class="r">₹${it.quantity * it.price}</span></div>
+        </div>`
       )
       .join('');
     return `<!DOCTYPE html>
@@ -248,90 +247,64 @@ export default function TaxInvoiceModal({
   <meta charset="UTF-8" />
   <title>${isKot ? 'KOT' : 'Tax_Invoice'}_${slipData.invoiceNumber}</title>
   <style>
-    @page { margin: 10mm; size: A4; }
+    @page { margin: 4mm; }
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .slip { border: 3px solid #000; padding: 24px 28px; }
-    .header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; border-bottom: 4px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
-    .brand { font-size: 76px; font-weight: 900; letter-spacing: 0.5px; color: #000; }
-    .sub { font-size: 30px; color: #000; margin-top: 2px; }
-    .meta { text-align: right; font-size: 34px; white-space: nowrap; color: #000; }
-    .meta .title { font-size: 40px; font-weight: 900; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 0; border-bottom: 2.5px solid #000; font-size: 34px; line-height: 1.45; color: #000; }
-    .tablewrap { margin: 10px 0; }
-    table { width: 100%; border-collapse: collapse; font-size: 34px; color: #000; }
-    th { text-align: left; padding: 8px 8px; border-bottom: 2.5px solid #000; font-size: 24px; text-transform: uppercase; color: #000; }
-    td { padding: 10px 8px; border-bottom: 1.5px solid #000; color: #000; }
-    td.c, th.c { text-align: center; }
-    td.r, th.r { text-align: right; }
-    .bottom { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; margin-bottom: 14px; }
-    .notes { font-size: 30px; font-style: italic; color: #000; }
-    .totals { width: 520px; max-width: 100%; font-size: 34px; margin-left: auto; color: #000; }
-    .total-row { display: flex; flex-wrap: wrap; justify-content: space-between; padding: 6px 0; }
-    .grand { font-size: 56px; font-weight: 900; border: 3px solid #000; padding: 8px 10px; margin-top: 8px; }
-    .footer { text-align: center; margin-top: 18px; font-size: 24px; color: #000; border-top: 2.5px solid #000; padding-top: 12px; }
-    .barcode { font-family: monospace; font-size: 32px; letter-spacing: 3px; margin-top: 8px; }
-    tr, .totals, .footer { break-inside: avoid; }
+    .slip { width: 72mm; max-width: 100%; margin: 0 auto; color: #000; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+    .c { text-align: center; }
+    .brand { font-size: 22px; font-weight: 900; letter-spacing: 0.5px; }
+    .sub { font-size: 11px; margin-top: 1px; }
+    .title { font-size: 15px; font-weight: 900; margin-top: 6px; }
+    .meta { font-size: 12px; }
+    .sep { border-top: 1.5px dashed #000; margin: 7px 0; }
+    .sec { font-size: 11px; font-weight: 900; text-transform: uppercase; }
+    .row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+    .row .r { white-space: nowrap; }
+    .item { margin: 5px 0; break-inside: avoid; }
+    .iname { font-size: 13px; font-weight: 700; }
+    .ivariant { font-size: 11px; }
+    .iline { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+    .iline .r { white-space: nowrap; font-weight: 700; }
+    .notes { font-size: 11px; font-style: italic; }
+    .grand { border: 2px solid #000; padding: 5px 7px; margin-top: 6px; font-size: 19px; font-weight: 900; break-inside: avoid; }
+    .footer { font-size: 11px; }
+    .barcode { font-family: monospace; font-size: 13px; letter-spacing: 2px; margin-top: 5px; }
   </style>
 </head>
 <body>
   <div class="slip">
-    <div class="header">
-      <div>
-        <div class="brand">${slipData.restaurantName}</div>
-        <div class="sub">${slipData.legalEntity}</div>
-        <div class="sub">${slipData.storeAddress}</div>
-        <div class="sub">GSTIN: ${slipData.gstin} | FSSAI: ${slipData.fssai}</div>
-      </div>
-      <div class="meta">
-        <div class="title">${isKot ? 'KITCHEN ORDER TICKET' : 'OFFICIAL TAX INVOICE'}</div>
-        <div>${slipData.invoiceNumber}</div>
-        <div>${slipData.dateStr}</div>
-        <div><strong>${slipData.orderType === 'Dine-in' ? `TABLE #${slipData.tableNumber}` : 'HOME DELIVERY'}</strong></div>
-      </div>
+    <div class="c">
+      <div class="brand">${slipData.restaurantName}</div>
+      <div class="sub">${slipData.legalEntity}</div>
+      <div class="sub">${slipData.storeAddress}</div>
+      <div class="sub">GSTIN: ${slipData.gstin} | FSSAI: ${slipData.fssai}</div>
+      <div class="title">${isKot ? 'KITCHEN ORDER TICKET' : 'TAX INVOICE'}</div>
+      <div class="meta">${slipData.invoiceNumber} | ${slipData.dateStr}</div>
+      <div class="meta"><strong>${slipData.orderType === 'Dine-in' ? `TABLE #${slipData.tableNumber}` : 'HOME DELIVERY'}</strong></div>
     </div>
-    <div class="grid">
-      <div>
-        <strong>${slipData.orderType === 'Dine-in' ? 'GUEST & TABLE INFO' : 'BILLED / DELIVERED TO:'}</strong><br/>
-        ${slipData.customerName}<br/>
-        Phone: ${slipData.customerPhone}<br/>
-        ${slipData.destinationAddress}
-      </div>
-      <div>
-        <strong>${slipData.orderType === 'Dine-in' ? 'SERVICE STATION' : 'DISPATCH & PAYMENT:'}</strong><br/>
-        Service: ${slipData.dispatchPartner}<br/>
-        Payment: ${slipData.paymentMode}<br/>
-        Status: ${slipData.orderStatus}
-      </div>
-    </div>
-    <div class="tablewrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Item Description</th>
-          <th>Size / Variant</th>
-          <th class="c">Qty</th>
-          <th class="r">Price</th>
-          <th class="r">Total</th>
-        </tr>
-      </thead>
-      <tbody>${rows}      </tbody>
-    </table>
-    </div>
-    <div class="bottom">
-      <div class="notes">${slipData.specialInstructions ? `"${slipData.specialInstructions}"` : ''}</div>
-      <div class="totals">
-        <div class="total-row"><span>Subtotal:</span><span>₹${itemsSubtotal}</span></div>
-        ${slipData.packagingDeliveryFee > 0 ? `<div class="total-row"><span>Delivery / Packaging:</span><span>₹${slipData.packagingDeliveryFee}</span></div>` : ''}
-        <div class="total-row"><span>GST (${slipData.gstPercent}%):</span><span>₹${gstAmount}</span></div>
-        ${slipData.discount > 0 ? `<div class="total-row"><span>Discount:</span><span>-₹${slipData.discount}</span></div>` : ''}
-        <div class="total-row grand"><span>Grand Total:</span><span>₹${grandTotal}</span></div>
-      </div>
-    </div>
-    <div class="footer">
+    <div class="sep"></div>
+    <div class="sec">${slipData.orderType === 'Dine-in' ? 'Guest' : 'Customer'}</div>
+    <div>${slipData.customerName}</div>
+    <div>Phone: ${slipData.customerPhone}</div>
+    <div>${slipData.destinationAddress}</div>
+    <div class="sep"></div>
+    <div class="row"><span>Service:</span><span class="r">${slipData.dispatchPartner}</span></div>
+    <div class="row"><span>Payment:</span><span class="r">${slipData.paymentMode}</span></div>
+    <div class="row"><span>Status:</span><span class="r">${slipData.orderStatus}</span></div>
+    <div class="sep"></div>
+    ${rows}
+    <div class="sep"></div>
+    <div class="row"><span>Subtotal:</span><span class="r">₹${itemsSubtotal}</span></div>
+    ${slipData.packagingDeliveryFee > 0 ? `<div class="row"><span>Delivery/Packing:</span><span class="r">₹${slipData.packagingDeliveryFee}</span></div>` : ''}
+    <div class="row"><span>GST (${slipData.gstPercent}%):</span><span class="r">₹${gstAmount}</span></div>
+    ${slipData.discount > 0 ? `<div class="row"><span>Discount:</span><span class="r">-₹${slipData.discount}</span></div>` : ''}
+    <div class="row grand"><span>Total:</span><span class="r">₹${grandTotal}</span></div>
+    ${slipData.specialInstructions ? `<div class="sep"></div><div class="notes">"${slipData.specialInstructions}"</div>` : ''}
+    <div class="sep"></div>
+    <div class="c footer">
       <div>${slipData.footerNote}</div>
-      <div class="barcode">|||| ||||| || |||||| ||||| ||||</div>
-      <div>This is a computer-generated invoice.</div>
+      <div class="barcode">|||| ||||| || ||||||</div>
+      <div>Computer-generated invoice.</div>
     </div>
   </div>
 </body>
@@ -339,16 +312,15 @@ export default function TaxInvoiceModal({
   };
 
   const handlePrint = () => {
-    // Print the standalone invoice document via a hidden iframe instead of
+    // Print the standalone 80mm receipt via a hidden iframe instead of
     // window.print() on the dashboard: the modal lives inside a fixed
     // backdrop-blur overlay which Chrome prints as a blank page.
-    // The iframe is laid out at the exact printable width (A4 210mm minus
-    // 2x10mm page margins) so the measured height matches print reality,
-    // then zoomed to fill exactly one full A4 page.
+    // The receipt prints at its natural readable size (no zoom), so it
+    // never overflows the paper width.
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
     iframe.style.cssText =
-      'position:fixed;left:-10000px;top:0;width:190mm;border:0;';
+      'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
     document.body.appendChild(iframe);
     const frameDoc =
       iframe.contentDocument || iframe.contentWindow?.document || null;
@@ -360,22 +332,6 @@ export default function TaxInvoiceModal({
     frameDoc.open();
     frameDoc.write(buildPrintHtml());
     frameDoc.close();
-    // Zoom short bills up to fill the printable A4 height (297mm - 2x10mm
-    // page margin); zoom slightly oversized bills down so everything still
-    // fits on exactly one sheet. Very long bills are left alone to flow
-    // across pages normally instead of shrinking to unreadable sizes.
-    const PX_PER_MM = 96 / 25.4;
-    const printableHeightPx = (297 - 20) * PX_PER_MM;
-    const contentHeightPx = frameDoc.body ? frameDoc.body.scrollHeight : 0;
-    if (contentHeightPx > 0) {
-      // 0.98 safety margin: rounding / font differences must never push
-      // even one line onto a second page or outside the sheet.
-      const fitZoom = (printableHeightPx / contentHeightPx) * 0.98;
-      if ((fitZoom > 1.02 && fitZoom <= 3) || (fitZoom < 0.98 && fitZoom >= 0.55)) {
-        (frameDoc.body.style as unknown as { zoom: string }).zoom =
-          fitZoom.toFixed(3);
-      }
-    }
     iframe.contentWindow.focus();
     iframe.contentWindow.print();
     setTimeout(() => {
