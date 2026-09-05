@@ -229,119 +229,184 @@ export default function TaxInvoiceModal({
     window.print();
   };
 
-  const handleDownloadSlip = () => {
-    // Generate clean HTML document download
+  const handleDownloadSlip = async () => {
+    // Generate PDF directly (no HTML download) using jsPDF text layout.
+    // Manual text layout used instead of html2canvas: Tailwind v4 oklch
+    // colors break canvas capture, standard jsPDF fonts also lack ₹ glyph
+    // so "Rs." is used throughout the PDF.
+    const { jsPDF } = await import('jspdf');
     const isKot = slipMode === 'kot';
-    const htmlContent = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>${isKot ? 'KOT' : 'Tax_Invoice'}_${slipData.invoiceNumber}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 20px; color: #111; background: #fff; }
-    .slip { max-width: 650px; margin: 0 auto; border: 1px solid #ccc; padding: 24px; border-radius: 8px; }
-    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 16px; }
-    .brand { font-size: 22px; font-weight: 900; letter-spacing: 0.5px; }
-    .sub { font-size: 11px; color: #555; }
-    .meta { text-align: right; font-size: 12px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 12px 0; border-bottom: 1px solid #eee; font-size: 12px; }
-    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; }
-    th { text-align: left; padding: 8px 4px; border-bottom: 1.5px solid #222; font-size: 10px; text-transform: uppercase; color: #444; }
-    td { padding: 8px 4px; border-bottom: 1px solid #f0f0f0; }
-    .totals { margin-left: auto; width: 260px; font-size: 12px; }
-    .total-row { display: flex; justify-content: space-between; padding: 4px 0; }
-    .grand { font-size: 16px; font-weight: 900; border-top: 1.5px solid #222; padding-top: 6px; margin-top: 6px; }
-    .footer { text-align: center; margin-top: 24px; font-size: 10px; color: #666; border-top: 1px dashed #ccc; padding-top: 12px; }
-    .barcode { font-family: monospace; font-size: 16px; letter-spacing: 3px; margin-top: 8px; }
-  </style>
-</head>
-<body>
-  <div class="slip">
-    <div class="header">
-      <div>
-        <div class="brand">${slipData.restaurantName}</div>
-        <div class="sub">${slipData.legalEntity}</div>
-        <div class="sub">${slipData.storeAddress}</div>
-        <div class="sub">GSTIN: ${slipData.gstin} | FSSAI: ${slipData.fssai}</div>
-      </div>
-      <div class="meta">
-        <div><strong>${isKot ? 'KITCHEN ORDER TICKET' : 'OFFICIAL TAX INVOICE'}</strong></div>
-        <div>${slipData.invoiceNumber}</div>
-        <div>${slipData.dateStr}</div>
-        <div><strong>${slipData.orderType === 'Dine-in' ? `TABLE #${slipData.tableNumber}` : 'HOME DELIVERY'}</strong></div>
-      </div>
-    </div>
-    <div class="grid">
-      <div>
-        <strong>BILLED / DELIVERED TO:</strong><br/>
-        ${slipData.customerName}<br/>
-        Phone: ${slipData.customerPhone}<br/>
-        ${slipData.destinationAddress}
-      </div>
-      <div>
-        <strong>DISPATCH & PAYMENT:</strong><br/>
-        Service: ${slipData.dispatchPartner}<br/>
-        Payment: ${slipData.paymentMode}<br/>
-        Status: ${slipData.orderStatus}
-      </div>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Item Description</th>
-          <th>Size/Variant</th>
-          <th style="text-align:center;">Qty</th>
-          <th style="text-align:right;">Price</th>
-          <th style="text-align:right;">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${slipData.items
-          .map(
-            (it) => `
-        <tr>
-          <td><strong>${it.name}</strong></td>
-          <td>${it.size} ${it.crust ? `• ${it.crust}` : ''}</td>
-          <td style="text-align:center;"><strong>${it.quantity}</strong></td>
-          <td style="text-align:right;">₹${it.price}</td>
-          <td style="text-align:right;"><strong>₹${it.quantity * it.price}</strong></td>
-        </tr>`
-          )
-          .join('')}
-      </tbody>
-    </table>
-    <div class="totals">
-      <div class="total-row"><span>Subtotal:</span> <span>₹${itemsSubtotal}</span></div>
-      ${
-        slipData.packagingDeliveryFee > 0
-          ? `<div class="total-row"><span>Delivery / Packaging:</span> <span>₹${slipData.packagingDeliveryFee}</span></div>`
-          : ''
-      }
-      <div class="total-row"><span>GST (${slipData.gstPercent}%):</span> <span>₹${gstAmount}</span></div>
-      ${
-        slipData.discount > 0
-          ? `<div class="total-row"><span>Discount:</span> <span>-₹${slipData.discount}</span></div>`
-          : ''
-      }
-      <div class="total-row grand"><span>Grand Total:</span> <span>₹${grandTotal}</span></div>
-    </div>
-    <div class="footer">
-      <div>${slipData.footerNote}</div>
-      <div class="barcode">|||| ||||| || |||||| ||||| ||||</div>
-    </div>
-  </div>
-</body>
-</html>`;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 14;
+    const usableWidth = pageWidth - margin * 2;
+    let y = 16;
 
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${slipMode === 'kot' ? 'KOT' : 'Tax_Invoice'}_${slipData.invoiceNumber}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const ensureSpace = (needed: number) => {
+      if (y + needed > 280) {
+        doc.addPage();
+        y = 16;
+      }
+    };
+    const sectionGap = (gap = 4) => {
+      y += gap;
+    };
+
+    // Header
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text(slipData.restaurantName || '7CHEESE PIZZA', margin, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(slipData.legalEntity || '', margin, y);
+    y += 4;
+    const addressLines = doc.splitTextToSize(slipData.storeAddress || '', usableWidth * 0.6);
+    doc.text(addressLines, margin, y);
+    y += addressLines.length * 4;
+    doc.setFontSize(8);
+    doc.text(`GSTIN: ${slipData.gstin || '-'}  |  FSSAI: ${slipData.fssai || '-'}`, margin, y);
+    y += 6;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text(
+      isKot ? 'KITCHEN ORDER TICKET' : 'OFFICIAL TAX INVOICE',
+      pageWidth - margin,
+      16,
+      { align: 'right' }
+    );
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(slipData.invoiceNumber || '', pageWidth - margin, 22, { align: 'right' });
+    doc.text(slipData.dateStr || '', pageWidth - margin, 27, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
+    doc.text(
+      slipData.orderType === 'Dine-in' ? `TABLE #${slipData.tableNumber}` : 'HOME DELIVERY',
+      pageWidth - margin,
+      32,
+      { align: 'right' }
+    );
+    y = Math.max(y, 38);
+
+    doc.setDrawColor(30);
+    doc.line(margin, y, pageWidth - margin, y);
+    sectionGap(5);
+
+    // Parties
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(slipData.orderType === 'Dine-in' ? 'GUEST & TABLE INFO' : 'BILLED / DELIVERED TO:', margin, y);
+    doc.text(slipData.orderType === 'Dine-in' ? 'SERVICE STATION' : 'DISPATCH & PAYMENT:', pageWidth / 2 + 4, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    const leftBlock = [
+      slipData.customerName || '',
+      `Phone: ${slipData.customerPhone || 'N/A'}`,
+      ...doc.splitTextToSize(slipData.destinationAddress || '', usableWidth / 2 - 4),
+    ];
+    const rightBlock = [
+      `Service: ${slipData.dispatchPartner || ''}`,
+      `Payment: ${slipData.paymentMode || ''}`,
+      `Status: ${slipData.orderStatus || ''}`,
+    ];
+    const blockHeight = Math.max(leftBlock.length, rightBlock.length) * 4.5;
+    ensureSpace(blockHeight + 4);
+    doc.text(leftBlock, margin, y);
+    doc.text(rightBlock, pageWidth / 2 + 4, y);
+    y += blockHeight + 3;
+    doc.line(margin, y, pageWidth - margin, y);
+    sectionGap(5);
+
+    // Items table header
+    const colX = [margin, margin + 78, margin + 118, margin + 134, margin + 156];
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('ITEM', colX[0], y);
+    doc.text('SIZE / CRUST', colX[1], y);
+    doc.text('QTY', colX[2], y);
+    doc.text('PRICE', colX[3], y, { align: 'right' });
+    doc.text('TOTAL', pageWidth - margin, y, { align: 'right' });
+    y += 2;
+    doc.setDrawColor(180);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 5;
+
+    // Items rows
+    doc.setFont('helvetica', 'normal');
+    slipData.items.forEach((it) => {
+      const nameLines = doc.splitTextToSize(it.name || 'Item', 72);
+      const variantLines = doc.splitTextToSize(
+        `${it.size || ''}${it.crust ? ` - ${it.crust}` : ''}`,
+        36
+      );
+      const rowHeight = Math.max(nameLines.length, variantLines.length) * 4 + 2;
+      ensureSpace(rowHeight + 2);
+      doc.text(nameLines, colX[0], y);
+      doc.setFontSize(7);
+      doc.text(variantLines, colX[1], y);
+      doc.setFontSize(8);
+      doc.text(String(it.quantity), colX[2], y);
+      doc.text(`Rs.${it.price}`, colX[3], y, { align: 'right' });
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Rs.${it.quantity * it.price}`, pageWidth - margin, y, { align: 'right' });
+      doc.setFont('helvetica', 'normal');
+      y += rowHeight;
+    });
+    doc.setDrawColor(180);
+    doc.line(margin, y, pageWidth - margin, y);
+    sectionGap(5);
+
+    // Totals (right aligned)
+    ensureSpace(30);
+    doc.setFontSize(9);
+    const totalRight = pageWidth - margin;
+    const totalLabelX = totalRight - 62;
+    doc.text('Subtotal:', totalLabelX, y);
+    doc.text(`Rs.${itemsSubtotal}`, totalRight, y, { align: 'right' });
+    y += 5;
+    if (slipData.packagingDeliveryFee > 0) {
+      doc.text('Delivery / Packaging:', totalLabelX, y);
+      doc.text(`Rs.${slipData.packagingDeliveryFee}`, totalRight, y, { align: 'right' });
+      y += 5;
+    }
+    doc.text(`GST (${slipData.gstPercent}%):`, totalLabelX, y);
+    doc.text(`Rs.${gstAmount}`, totalRight, y, { align: 'right' });
+    y += 5;
+    if (slipData.discount > 0) {
+      doc.text('Discount:', totalLabelX, y);
+      doc.text(`-Rs.${slipData.discount}`, totalRight, y, { align: 'right' });
+      y += 5;
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('Grand Total:', totalLabelX, y);
+    doc.text(`Rs.${grandTotal}`, totalRight, y, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    sectionGap(6);
+
+    // Notes + footer
+    if (slipData.specialInstructions) {
+      ensureSpace(12);
+      doc.setFontSize(8);
+      doc.text('Notes:', margin, y);
+      y += 4;
+      const noteLines = doc.splitTextToSize(slipData.specialInstructions, usableWidth);
+      doc.text(noteLines, margin, y);
+      y += noteLines.length * 4 + 3;
+    }
+    ensureSpace(12);
+    doc.setDrawColor(150);
+    doc.setLineDashPattern([2, 2], 0);
+    doc.line(margin, y, pageWidth - margin, y);
+    doc.setLineDashPattern([], 0);
+    y += 5;
+    doc.setFontSize(8);
+    const footerLines = doc.splitTextToSize(slipData.footerNote || '', usableWidth);
+    doc.text(footerLines, pageWidth / 2, y, { align: 'center' });
+
+    doc.save(`${isKot ? 'KOT' : 'Tax_Invoice'}_${slipData.invoiceNumber}.pdf`);
   };
 
   return (
@@ -392,7 +457,7 @@ export default function TaxInvoiceModal({
                 type="button"
                 onClick={handleDownloadSlip}
                 className="flex items-center space-x-1 text-xs font-bold px-2.5 py-1.5 rounded-lg border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer"
-                title="Download HTML/PDF Slip"
+                title="Download PDF Slip"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Download</span>
