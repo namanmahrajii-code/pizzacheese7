@@ -358,36 +358,8 @@ export default function TaxInvoiceModal({
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 pb-4 mb-5 print:hidden">
             <div className="flex items-center space-x-2">
               <span className="text-[11px] font-black tracking-wider uppercase text-slate-500">
-                {slipMode === 'invoice'
-                  ? 'OFFICIAL TAX INVOICE • PACKING SLIP'
-                  : 'KITCHEN ORDER TICKET • KOT SLIP'}
+                OFFICIAL TAX INVOICE • PACKING SLIP
               </span>
-
-              {/* Mode Toggle Switch */}
-              <div className="bg-slate-100 p-0.5 rounded-lg flex items-center text-[10px] font-bold">
-                <button
-                  type="button"
-                  onClick={() => setSlipMode('invoice')}
-                  className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                    slipMode === 'invoice'
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Tax Invoice
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSlipMode('kot')}
-                  className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                    slipMode === 'kot'
-                      ? 'bg-[#e31837] text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Kitchen KOT
-                </button>
-              </div>
             </div>
 
             <div className="flex items-center space-x-2">

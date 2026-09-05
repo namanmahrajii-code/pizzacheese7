@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useCartStore } from '@/store/cartStore';
 import { useLocation } from '@/context/LocationContext';
+import { useAuth } from '@/context/AuthContext';
 import VegNonVegIcon from './VegNonVegIcon';
 import CompleteMealSection from './CompleteMealSection';
 import ChocoLavaUpsellModal from './ChocoLavaUpsellModal';
@@ -90,11 +91,25 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
   const [hasShownUpsell, setHasShownUpsell] = useState<boolean>(false);
   const [selectedPayment, setSelectedPayment] = useState<'Paytm UPI' | 'Cash on Delivery'>('Paytm UPI');
 
+  const { userProfile, isLoggedIn, savePastOrder } = useAuth();
+
   // Editable customer details
-  const [name, setName] = useState(customerName || '');
-  const [phone, setPhone] = useState(customerPhone || '');
+  const [name, setName] = useState(customerName || userProfile?.name || '');
+  const [phone, setPhone] = useState(customerPhone || userProfile?.phone || '');
   const [addressLine1, setAddressLine1] = useState('');
   const [addressLine2, setAddressLine2] = useState('');
+
+  // Auto-sync profile info when user logs in or profile updates
+  useEffect(() => {
+    if (userProfile) {
+      if (!name && userProfile.name) {
+        setName(userProfile.name);
+      }
+      if (!phone && userProfile.phone) {
+        setPhone(userProfile.phone);
+      }
+    }
+  }, [userProfile]);
 
   // Read table param from URL if present (e.g. /dine-in?table=5)
   const urlTable = searchParams?.get('table') || '';
@@ -311,6 +326,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
 
       try {
         triggerConfetti();
+      } catch {}
+
+      try {
+        savePastOrder({
+          id: placedOrderId,
+          totalAmount: Number(grandTotal) || 0,
+          itemSummary: items.map((i) => `${i.quantity}x ${i.name}`).join(', '),
+          items: sanitizedItems,
+          customerPhone: phone.trim() || undefined,
+          customerName: name.trim() || undefined,
+        });
       } catch {}
 
       // Instantly clear Zustand cart state
@@ -667,13 +693,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
 
                 {/* Customer Details Form */}
                 <div className="bg-[#181d27] p-3 rounded-2xl border border-stone-800 space-y-2">
-                  <span className="text-xs font-black uppercase text-stone-300 tracking-wider block">
-                    {effectiveMode === 'Dine-in'
-                      ? 'Table Details'
-                      : effectiveMode === 'Takeaway'
-                      ? 'Takeaway Details'
-                      : 'Delivery Address & Contact'}
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase text-stone-300 tracking-wider block">
+                      {effectiveMode === 'Dine-in'
+                        ? 'Table Details'
+                        : effectiveMode === 'Takeaway'
+                        ? 'Takeaway Details'
+                        : 'Delivery Address & Contact'}
+                    </span>
+                    {userProfile?.phone && (
+                      <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                        ✓ Profile Linked
+                      </span>
+                    )}
+                  </div>
 
                   {formError && (
                     <div className="bg-red-950/70 border border-red-700/60 text-red-200 p-2.5 rounded-xl text-xs font-semibold flex items-center space-x-2">
@@ -689,7 +722,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="Your Name"
+                        placeholder={effectiveMode === 'Dine-in' ? 'Your Name (Optional)' : 'Your Name'}
                         className="w-full bg-stone-900 border border-stone-700 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-stone-500 outline-none focus:border-amber-400"
                       />
                     </div>
@@ -703,10 +736,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onOrder
                           setPhone(e.target.value);
                           if (formError) setFormError(null);
                         }}
-                        placeholder="Phone Number (Required for rider/pickup alert)"
-                        className="w-full bg-stone-900 border border-stone-700 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-stone-500 outline-none focus:border-amber-400"
-                        required
+                        placeholder={
+                          effectiveMode === 'Dine-in'
+                            ? (userProfile?.phone ? 'Phone Number' : 'Phone Number (Optional for bill/updates)')
+                            : (userProfile?.phone ? 'Phone Number' : (effectiveMode === 'Takeaway' ? 'Phone Number (Required for pickup alert)' : 'Phone Number (Required for rider contact)'))
+                        }
+                        className={`w-full bg-stone-900 border border-stone-700 rounded-xl pl-8 ${userProfile?.phone && phone === userProfile.phone ? 'pr-20' : 'pr-3'} py-2 text-xs text-white placeholder-stone-500 outline-none focus:border-amber-400`}
+                        required={effectiveMode !== 'Dine-in'}
                       />
+                      {userProfile?.phone && phone === userProfile.phone && (
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-emerald-400 font-bold bg-emerald-950/70 border border-emerald-500/30 px-2 py-0.5 rounded-md pointer-events-none">
+                          ✓ Saved
+                        </span>
+                      )}
                     </div>
 
                     {effectiveMode === 'Delivery' && (

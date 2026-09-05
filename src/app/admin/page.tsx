@@ -1909,27 +1909,16 @@ _Please deliver hot & cheesy!_`;
                           </a>
                         )}
 
-                        {/* Tax Invoice & KOT Slip Actions */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenInvoiceModal(order, 'invoice')}
-                            className="bg-white hover:bg-slate-200 text-slate-900 font-extrabold text-xs py-2 px-2 rounded-xl flex items-center justify-center space-x-1.5 shadow-sm transition-all cursor-pointer"
-                            title="Official Tax Invoice & Packing Slip"
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                            <span>Tax Slip</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenInvoiceModal(order, 'kot')}
-                            className="bg-[#e31837] hover:bg-[#c4122d] text-white font-extrabold text-xs py-2 px-2 rounded-xl flex items-center justify-center space-x-1.5 shadow-sm transition-all cursor-pointer"
-                            title="Kitchen Order Ticket (KOT)"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            <span>Kitchen KOT</span>
-                          </button>
-                        </div>
+                        {/* Tax Invoice Action */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenInvoiceModal(order, 'invoice')}
+                          className="w-full bg-white hover:bg-slate-200 text-slate-900 font-extrabold text-xs py-2 px-3 rounded-xl flex items-center justify-center space-x-1.5 shadow-sm transition-all cursor-pointer"
+                          title="Official Tax Invoice & Packing Slip"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Tax Invoice</span>
+                        </button>
 
                         {/* Status Progression Workflow */}
                         <div className="grid grid-cols-2 gap-2">

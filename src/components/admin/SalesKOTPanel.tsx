@@ -13,7 +13,6 @@ import {
   Filter,
   CreditCard,
   Banknote,
-  FileText,
   Clock,
   CheckCircle2,
   AlertCircle,
@@ -690,18 +689,7 @@ export default function SalesKOTPanel({ orders, onOpenInvoice }: SalesKOTPanelPr
                           title="View, Edit & Print Official Tax Invoice"
                         >
                           <Printer className="w-3 h-3" />
-                          <span>Tax Slip</span>
-                        </button>
-
-                        {/* Kitchen KOT Slip */}
-                        <button
-                          type="button"
-                          onClick={() => onOpenInvoice(ord, 'kot')}
-                          className="inline-flex items-center space-x-1 bg-[#e31837] hover:bg-[#c4122d] text-white font-black text-[11px] px-2 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
-                          title="Print Kitchen KOT Order Slip"
-                        >
-                          <FileText className="w-3 h-3" />
-                          <span>KOT</span>
+                          <span>Tax Invoice</span>
                         </button>
                       </td>
                     </tr>

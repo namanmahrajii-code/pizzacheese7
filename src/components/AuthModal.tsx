@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Phone, Mail, Lock, User, Sparkles, Check, ArrowRight } from 'lucide-react';
+import { X, Phone, Mail, Lock, User, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 interface AuthModalProps {
@@ -70,14 +70,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         setError(res.error || 'Login failed');
       }
     }
-  };
-
-  const handleQuickDemo = async () => {
-    setIsLoading(true);
-    await loginWithPhoneMock('9876543210', 'Aman Sharma');
-    setIsLoading(false);
-    if (onSuccess) onSuccess();
-    onClose();
   };
 
   return (
@@ -249,18 +241,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             </div>
           </form>
         )}
-
-        {/* Quick Demo 1-Click Button */}
-        <div className="pt-2 border-t border-stone-800 text-center">
-          <button
-            type="button"
-            onClick={handleQuickDemo}
-            className="w-full py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>1-Click Test Customer Login</span>
-          </button>
-        </div>
       </div>
     </div>
   );
