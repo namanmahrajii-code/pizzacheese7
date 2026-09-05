@@ -251,26 +251,27 @@ export default function TaxInvoiceModal({
     @page { margin: 10mm; size: A4; }
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; color: #111; background: #fff; }
-    .slip { border: 2px solid #222; padding: 32px 34px; min-height: 270mm; display: flex; flex-direction: column; }
-    .header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #222; padding-bottom: 16px; margin-bottom: 20px; }
-    .brand { font-size: 36px; font-weight: 900; letter-spacing: 0.5px; }
-    .sub { font-size: 14px; color: #444; margin-top: 3px; }
-    .meta { text-align: right; font-size: 15px; white-space: nowrap; }
-    .meta .title { font-size: 21px; font-weight: 900; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 16px 0; border-bottom: 1px solid #222; font-size: 15px; line-height: 1.7; }
-    .tablewrap { margin: 20px 0; }
-    table { width: 100%; border-collapse: collapse; font-size: 15px; }
-    th { text-align: left; padding: 12px 8px; border-bottom: 2px solid #222; font-size: 12px; text-transform: uppercase; color: #333; }
-    td { padding: 14px 8px; border-bottom: 1px solid #e5e5e5; }
+    .slip { border: 2px solid #222; padding: 34px 36px; }
+    .header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #222; padding-bottom: 16px; margin-bottom: 22px; }
+    .brand { font-size: 40px; font-weight: 900; letter-spacing: 0.5px; }
+    .sub { font-size: 15px; color: #444; margin-top: 3px; }
+    .meta { text-align: right; font-size: 16px; white-space: nowrap; }
+    .meta .title { font-size: 22px; font-weight: 900; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 18px 0; border-bottom: 1px solid #222; font-size: 16px; line-height: 1.7; }
+    .tablewrap { margin: 22px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 16px; }
+    th { text-align: left; padding: 13px 8px; border-bottom: 2px solid #222; font-size: 13px; text-transform: uppercase; color: #333; }
+    td { padding: 16px 8px; border-bottom: 1px solid #e5e5e5; }
     td.c, th.c { text-align: center; }
     td.r, th.r { text-align: right; }
-    .bottom { display: flex; justify-content: space-between; gap: 20px; margin-top: 8px; margin-bottom: 30px; }
-    .notes { font-size: 14px; font-style: italic; color: #333; max-width: 55%; }
-    .totals { width: 300px; font-size: 15px; margin-left: auto; }
-    .total-row { display: flex; justify-content: space-between; padding: 6px 0; }
-    .grand { font-size: 24px; font-weight: 900; border-top: 2px solid #222; padding-top: 10px; margin-top: 8px; }
-    .footer { margin-top: auto; text-align: center; font-size: 12px; color: #444; border-top: 1px dashed #999; padding-top: 16px; }
-    .barcode { font-family: monospace; font-size: 18px; letter-spacing: 3px; margin-top: 10px; }
+    .bottom { display: flex; justify-content: space-between; gap: 20px; margin-top: 10px; margin-bottom: 34px; }
+    .notes { font-size: 15px; font-style: italic; color: #333; max-width: 55%; }
+    .totals { width: 320px; font-size: 16px; margin-left: auto; }
+    .total-row { display: flex; justify-content: space-between; padding: 7px 0; }
+    .grand { font-size: 28px; font-weight: 900; border-top: 2px solid #222; padding-top: 10px; margin-top: 8px; }
+    .footer { text-align: center; margin-top: 36px; font-size: 13px; color: #444; border-top: 1px dashed #999; padding-top: 18px; }
+    .barcode { font-family: monospace; font-size: 20px; letter-spacing: 3px; margin-top: 10px; }
+    tr, .totals, .footer { break-inside: avoid; }
   </style>
 </head>
 <body>
@@ -341,10 +342,13 @@ export default function TaxInvoiceModal({
     // Print the standalone invoice document via a hidden iframe instead of
     // window.print() on the dashboard: the modal lives inside a fixed
     // backdrop-blur overlay which Chrome prints as a blank page.
+    // The iframe is laid out at the exact printable width (A4 210mm minus
+    // 2x10mm page margins) so the measured height matches print reality,
+    // then zoomed to fill exactly one full A4 page.
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
     iframe.style.cssText =
-      'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+      'position:fixed;left:-10000px;top:0;width:190mm;border:0;';
     document.body.appendChild(iframe);
     const frameDoc =
       iframe.contentDocument || iframe.contentWindow?.document || null;
@@ -356,6 +360,19 @@ export default function TaxInvoiceModal({
     frameDoc.open();
     frameDoc.write(buildPrintHtml());
     frameDoc.close();
+    // Zoom short bills up to fill the printable A4 height (297mm - 2x10mm
+    // page margin). Long bills that already flow past one page are left
+    // alone so nothing shrinks or gets cut.
+    const PX_PER_MM = 96 / 25.4;
+    const printableHeightPx = (297 - 20) * PX_PER_MM;
+    const contentHeightPx = frameDoc.body ? frameDoc.body.scrollHeight : 0;
+    if (contentHeightPx > 0 && contentHeightPx < printableHeightPx) {
+      // 0.98 safety margin: rounding / font differences must never push
+      // even one line onto a second page or outside the sheet.
+      const zoom = Math.min((printableHeightPx / contentHeightPx) * 0.98, 3);
+      (frameDoc.body.style as unknown as { zoom: string }).zoom =
+        zoom.toFixed(3);
+    }
     iframe.contentWindow.focus();
     iframe.contentWindow.print();
     setTimeout(() => {
