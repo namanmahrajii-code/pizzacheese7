@@ -253,24 +253,24 @@ export default function TaxInvoiceModal({
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .slip { border: 3px solid #000; padding: 30px 32px; }
     .header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; border-bottom: 4px solid #000; padding-bottom: 14px; margin-bottom: 20px; }
-    .brand { font-size: 56px; font-weight: 900; letter-spacing: 0.5px; color: #000; }
-    .sub { font-size: 22px; color: #000; margin-top: 4px; }
-    .meta { text-align: right; font-size: 24px; white-space: nowrap; color: #000; }
-    .meta .title { font-size: 30px; font-weight: 900; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 18px 0; border-bottom: 2.5px solid #000; font-size: 24px; line-height: 1.7; color: #000; }
+    .brand { font-size: 88px; font-weight: 900; letter-spacing: 0.5px; color: #000; }
+    .sub { font-size: 40px; color: #000; margin-top: 4px; }
+    .meta { text-align: right; font-size: 44px; white-space: nowrap; color: #000; }
+    .meta .title { font-size: 54px; font-weight: 900; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 18px 0; border-bottom: 2.5px solid #000; font-size: 44px; line-height: 1.7; color: #000; }
     .tablewrap { margin: 22px 0; }
-    table { width: 100%; border-collapse: collapse; font-size: 24px; color: #000; }
-    th { text-align: left; padding: 16px 10px; border-bottom: 2.5px solid #000; font-size: 18px; text-transform: uppercase; color: #000; }
+    table { width: 100%; border-collapse: collapse; font-size: 44px; color: #000; }
+    th { text-align: left; padding: 16px 10px; border-bottom: 2.5px solid #000; font-size: 34px; text-transform: uppercase; color: #000; }
     td { padding: 22px 10px; border-bottom: 1.5px solid #000; color: #000; }
     td.c, th.c { text-align: center; }
     td.r, th.r { text-align: right; }
-    .bottom { display: flex; justify-content: space-between; gap: 20px; margin-top: 10px; margin-bottom: 34px; }
-    .notes { font-size: 22px; font-style: italic; color: #000; max-width: 50%; }
-    .totals { width: 420px; flex-shrink: 0; font-size: 24px; margin-left: auto; color: #000; }
+    .bottom { display: flex; flex-direction: column; gap: 20px; margin-top: 10px; margin-bottom: 34px; }
+    .notes { font-size: 40px; font-style: italic; color: #000; }
+    .totals { width: 560px; max-width: 100%; font-size: 44px; margin-left: auto; color: #000; }
     .total-row { display: flex; justify-content: space-between; padding: 10px 0; }
-    .grand { font-size: 40px; font-weight: 900; border: 3px solid #000; padding: 10px 12px; margin-top: 12px; }
-    .footer { text-align: center; margin-top: 36px; font-size: 18px; color: #000; border-top: 2.5px solid #000; padding-top: 18px; }
-    .barcode { font-family: monospace; font-size: 28px; letter-spacing: 3px; margin-top: 10px; }
+    .grand { font-size: 72px; font-weight: 900; border: 3px solid #000; padding: 10px 12px; margin-top: 12px; }
+    .footer { text-align: center; margin-top: 36px; font-size: 32px; color: #000; border-top: 2.5px solid #000; padding-top: 18px; }
+    .barcode { font-family: monospace; font-size: 36px; letter-spacing: 3px; margin-top: 10px; }
     tr, .totals, .footer { break-inside: avoid; }
   </style>
 </head>
@@ -371,7 +371,7 @@ export default function TaxInvoiceModal({
       // 0.98 safety margin: rounding / font differences must never push
       // even one line onto a second page or outside the sheet.
       const fitZoom = (printableHeightPx / contentHeightPx) * 0.98;
-      if ((fitZoom > 1.02 && fitZoom <= 3) || (fitZoom < 0.98 && fitZoom >= 0.55)) {
+      if ((fitZoom > 1.02 && fitZoom <= 3) || (fitZoom < 0.98 && fitZoom >= 0.35)) {
         (frameDoc.body.style as unknown as { zoom: string }).zoom =
           fitZoom.toFixed(3);
       }
@@ -408,43 +408,43 @@ export default function TaxInvoiceModal({
 
     // Header
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(24);
+    doc.setFontSize(36);
     doc.text(slipData.restaurantName || '7CHEESE PIZZA', left, y);
-    y += 9;
-    doc.setFontSize(11);
+    y += 13;
+    doc.setFontSize(15);
     doc.setFont('helvetica', 'normal');
     doc.text(slipData.legalEntity || '', left, y);
-    y += 5.5;
-    doc.setFontSize(10);
-    const addressLines = doc.splitTextToSize(slipData.storeAddress || '', 108);
+    y += 7.5;
+    doc.setFontSize(14);
+    const addressLines = doc.splitTextToSize(slipData.storeAddress || '', 100);
     doc.text(addressLines, left, y);
-    y += addressLines.length * 4.8;
-    doc.setFontSize(9);
+    y += addressLines.length * 6.5;
+    doc.setFontSize(12);
     doc.text(`GSTIN: ${slipData.gstin || '-'}  |  FSSAI: ${slipData.fssai || '-'}`, left, y);
-    y += 7;
+    y += 9;
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
+    doc.setFontSize(20);
     doc.text(
       isKot ? 'KITCHEN ORDER TICKET' : 'OFFICIAL TAX INVOICE',
       right,
       22,
       { align: 'right' }
     );
-    doc.setFontSize(11);
+    doc.setFontSize(15);
     doc.setFont('helvetica', 'normal');
-    doc.text(slipData.invoiceNumber || '', right, 29, { align: 'right' });
-    doc.setFontSize(10);
-    doc.text(slipData.dateStr || '', right, 35, { align: 'right' });
+    doc.text(slipData.invoiceNumber || '', right, 31, { align: 'right' });
+    doc.setFontSize(13);
+    doc.text(slipData.dateStr || '', right, 38, { align: 'right' });
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(15);
     doc.text(
       slipData.orderType === 'Dine-in' ? `TABLE #${slipData.tableNumber}` : 'HOME DELIVERY',
       right,
-      41,
+      46,
       { align: 'right' }
     );
-    y = Math.max(y, 48);
+    y = Math.max(y, 56);
 
     doc.setDrawColor(30);
     doc.setLineWidth(0.8);
@@ -453,13 +453,13 @@ export default function TaxInvoiceModal({
     y += 7;
 
     // Parties
-    doc.setFontSize(10);
+    doc.setFontSize(13);
     doc.setFont('helvetica', 'bold');
     doc.text(slipData.orderType === 'Dine-in' ? 'GUEST & TABLE INFO' : 'BILLED / DELIVERED TO:', left, y);
     doc.text(slipData.orderType === 'Dine-in' ? 'SERVICE STATION' : 'DISPATCH & PAYMENT:', pageWidth / 2 + 4, y);
-    y += 6;
+    y += 8;
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
+    doc.setFontSize(15);
     const leftBlock = [
       slipData.customerName || '',
       `Phone: ${slipData.customerPhone || 'N/A'}`,
@@ -470,13 +470,13 @@ export default function TaxInvoiceModal({
       `Payment: ${slipData.paymentMode || ''}`,
       `Status: ${slipData.orderStatus || ''}`,
     ];
-    const blockHeight = Math.max(leftBlock.length, rightBlock.length) * 6;
+    const blockHeight = Math.max(leftBlock.length, rightBlock.length) * 8;
     ensureSpace(blockHeight + 4);
     doc.text(leftBlock, left, y);
     doc.text(rightBlock, pageWidth / 2 + 4, y);
-    y += blockHeight + 4;
+    y += blockHeight + 5;
     doc.line(left, y, right, y);
-    y += 7;
+    y += 8;
 
     // Items table: measure rows first, then expand row padding so a short
     // bill stretches down the page instead of ending halfway.
@@ -493,14 +493,14 @@ export default function TaxInvoiceModal({
         it,
         nameLines,
         variantLines,
-        natural: Math.max(nameLines.length, variantLines.length) * 5 + 4,
+        natural: Math.max(nameLines.length, variantLines.length) * 7 + 5,
       };
     });
     const totalsLineCount =
       2 + (slipData.packagingDeliveryFee > 0 ? 1 : 0) + (slipData.discount > 0 ? 1 : 0);
-    const totalsH = totalsLineCount * 7 + 13;
+    const totalsH = totalsLineCount * 9 + 17;
     const notesH = slipData.specialInstructions
-      ? doc.splitTextToSize(slipData.specialInstructions, usableWidth).length * 4.8 + 12
+      ? doc.splitTextToSize(slipData.specialInstructions, usableWidth).length * 6.5 + 14
       : 0;
     const rowsStartY = y + 12;
     const contentBottom = 250;
@@ -512,7 +512,7 @@ export default function TaxInvoiceModal({
 
     // Items table header
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
+    doc.setFontSize(13);
     doc.text('ITEM', colX[0], y);
     doc.text('SIZE / CRUST', colX[1], y);
     doc.text('QTY', colX[2], y);
@@ -528,12 +528,12 @@ export default function TaxInvoiceModal({
       const rowHeight = natural + extraPerRow;
       ensureSpace(rowHeight + 3);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
+      doc.setFontSize(15);
       doc.text(nameLines, colX[0], y);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
+      doc.setFontSize(12);
       doc.text(variantLines, colX[1], y);
-      doc.setFontSize(11);
+      doc.setFontSize(15);
       doc.text(String(it.quantity), colX[2], y);
       doc.text(`Rs.${it.price}`, colX[3], y, { align: 'right' });
       doc.setFont('helvetica', 'bold');
@@ -546,41 +546,41 @@ export default function TaxInvoiceModal({
     y += 7;
 
     // Totals (right aligned)
-    ensureSpace(34);
-    doc.setFontSize(11);
-    const totalLabelX = right - 70;
+    ensureSpace(60);
+    doc.setFontSize(15);
+    const totalLabelX = right - 84;
     doc.text('Subtotal:', totalLabelX, y);
     doc.text(`Rs.${itemsSubtotal}`, right, y, { align: 'right' });
-    y += 7;
+    y += 9;
     if (slipData.packagingDeliveryFee > 0) {
       doc.text('Delivery / Packaging:', totalLabelX, y);
       doc.text(`Rs.${slipData.packagingDeliveryFee}`, right, y, { align: 'right' });
-      y += 7;
+      y += 9;
     }
     doc.text(`GST (${slipData.gstPercent}%):`, totalLabelX, y);
     doc.text(`Rs.${gstAmount}`, right, y, { align: 'right' });
-    y += 7;
+    y += 9;
     if (slipData.discount > 0) {
       doc.text('Discount:', totalLabelX, y);
       doc.text(`-Rs.${slipData.discount}`, right, y, { align: 'right' });
-      y += 7;
+      y += 9;
     }
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(15);
+    doc.setFontSize(22);
     doc.text('Grand Total:', totalLabelX, y);
     doc.text(`Rs.${grandTotal}`, right, y, { align: 'right' });
     doc.setFont('helvetica', 'normal');
-    y += 8;
+    y += 10;
 
     // Notes
     if (slipData.specialInstructions) {
-      ensureSpace(14);
-      doc.setFontSize(10);
+      ensureSpace(16);
+      doc.setFontSize(13);
       doc.text('Notes:', left, y);
-      y += 5;
+      y += 7;
       const noteLines = doc.splitTextToSize(slipData.specialInstructions, usableWidth);
       doc.text(noteLines, left, y);
-      y += noteLines.length * 4.8 + 4;
+      y += noteLines.length * 6.5 + 5;
     }
 
     // Footer pinned to page bottom on single-page bills so no half-empty page.
@@ -595,14 +595,14 @@ export default function TaxInvoiceModal({
     doc.line(left, y, right, y);
     doc.setLineDashPattern([], 0);
     y += 6;
-    doc.setFontSize(9);
+    doc.setFontSize(12);
     const footerLines = doc.splitTextToSize(slipData.footerNote || '', usableWidth);
     doc.text(footerLines, pageWidth / 2, y, { align: 'center' });
-    y += footerLines.length * 4.2 + 3;
-    doc.setFontSize(10);
+    y += footerLines.length * 5.5 + 4;
+    doc.setFontSize(13);
     doc.text('|| |||| | ||||| || || ||||| | ||||', pageWidth / 2, y, { align: 'center' });
-    y += 5;
-    doc.setFontSize(8);
+    y += 6;
+    doc.setFontSize(11);
     doc.text('This is a computer-generated invoice.', pageWidth / 2, y, { align: 'center' });
 
     // Full-page frame on single-page bills for a proper A4 invoice look.
