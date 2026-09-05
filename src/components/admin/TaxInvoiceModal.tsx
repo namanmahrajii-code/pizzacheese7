@@ -250,7 +250,7 @@ export default function TaxInvoiceModal({
     @page { margin: 5mm; }
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .slip { width: 70mm; max-width: 100%; margin: 0 auto; color: #000; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+    .slip { width: 70mm; max-width: 100%; margin: 0 auto; color: #000; font-size: 14px; font-weight: 700; line-height: 1.5; overflow-wrap: anywhere; }
     .c { text-align: center; }
     .brand { font-size: 24px; font-weight: 900; letter-spacing: 0.5px; }
     .sub { font-size: 12px; margin-top: 1px; }
