@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { db } from './firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 export interface OrderItem {
   id: string;
@@ -138,4 +138,26 @@ export function updateGlobalOrder(id: string, updates: Partial<OrderData>): Orde
 export function setGlobalOrders(orders: OrderData[]) {
   globalThis.__GLOBAL_ORDERS__ = orders;
   saveOrdersToDisk(orders);
+}
+
+export function deleteGlobalOrder(id: string): boolean {
+  const orders = getGlobalOrders();
+  const idx = orders.findIndex((o) => o.id === id);
+  if (idx === -1) return false;
+  orders.splice(idx, 1);
+  saveOrdersToDisk(orders);
+
+  // Sync deletion to Firestore
+  try {
+    if (db) {
+      deleteDoc(doc(db, 'orders', id)).catch(() => {});
+    }
+  } catch {}
+
+  return true;
+}
+
+export function clearGlobalOrders(): void {
+  globalThis.__GLOBAL_ORDERS__ = [];
+  saveOrdersToDisk([]);
 }

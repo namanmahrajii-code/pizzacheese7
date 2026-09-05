@@ -562,6 +562,26 @@ export default function AdminPage() {
     }
   };
 
+  // Delete single order (removes demo / unwanted tickets)
+  const handleDeleteOrder = async (orderId: string) => {
+    const confirmDelete = window.confirm(`Delete order ${orderId}? This cannot be undone.`);
+    if (!confirmDelete) return;
+
+    setOrders((prev) => {
+      const updated = prev.filter((o) => o.id !== orderId);
+      try {
+        localStorage.setItem('7cheese_admin_persisted_orders', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    try {
+      await fetch(`/api/admin/orders/${orderId}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to delete order:', err);
+    }
+  };
+
   // Toggle Item Stock
   const handleToggleStock = async (product: ProductItem) => {
     const nextStock = product.inStock === false ? true : false;
@@ -1909,16 +1929,26 @@ _Please deliver hot & cheesy!_`;
                           </a>
                         )}
 
-                        {/* Tax Invoice Action */}
-                        <button
-                          type="button"
-                          onClick={() => handleOpenInvoiceModal(order, 'invoice')}
-                          className="w-full bg-white hover:bg-slate-200 text-slate-900 font-extrabold text-xs py-2 px-3 rounded-xl flex items-center justify-center space-x-1.5 shadow-sm transition-all cursor-pointer"
-                          title="Official Tax Invoice & Packing Slip"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                          <span>Tax Invoice</span>
-                        </button>
+                        {/* Tax Invoice & Delete Order Actions */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenInvoiceModal(order, 'invoice')}
+                            className="flex-1 bg-white hover:bg-slate-200 text-slate-900 font-extrabold text-xs py-2 px-3 rounded-xl flex items-center justify-center space-x-1.5 shadow-sm transition-all cursor-pointer"
+                            title="Official Tax Invoice & Packing Slip"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>Tax Invoice</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOrder(order.id)}
+                            className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 transition-all cursor-pointer"
+                            title="Delete this order"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
 
                         {/* Status Progression Workflow */}
                         <div className="grid grid-cols-2 gap-2">
@@ -2169,6 +2199,7 @@ _Please deliver hot & cheesy!_`;
             <SalesKOTPanel
               orders={orders}
               onOpenInvoice={handleOpenInvoiceModal}
+              onDeleteOrder={handleDeleteOrder}
             />
 
             {/* 2. Visual Revenue Velocity & Trends */}

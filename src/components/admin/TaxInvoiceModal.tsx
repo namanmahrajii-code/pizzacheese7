@@ -139,7 +139,7 @@ export default function TaxInvoiceModal({
       invoiceNumber: `INV-${sourceOrder.id || Math.floor(10000 + Math.random() * 90000)}`,
       dateStr: formattedDate,
       customerName: sourceOrder.customerName || (isDineIn ? 'In-House Guest' : 'Valued Customer'),
-      customerPhone: sourceOrder.customerPhone || (isDineIn ? 'Table Service' : '9876543210'),
+      customerPhone: sourceOrder.customerPhone || (isDineIn ? 'Table Service' : 'N/A'),
       destinationAddress: isDineIn
         ? `Table #${sourceOrder.tableNumber || '01'} (Dine-In Area)`
         : sourceOrder.deliveryAddress || 'Kaladhungi Road, Haldwani',

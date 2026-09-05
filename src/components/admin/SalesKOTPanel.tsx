@@ -20,15 +20,17 @@ import {
   Receipt,
   Layers,
   ChevronDown,
+  Trash2,
 } from 'lucide-react';
 import { OrderData } from './TaxInvoiceModal';
 
 interface SalesKOTPanelProps {
   orders: OrderData[];
   onOpenInvoice: (order: OrderData, mode: 'invoice' | 'kot') => void;
+  onDeleteOrder?: (orderId: string) => void;
 }
 
-export default function SalesKOTPanel({ orders, onOpenInvoice }: SalesKOTPanelProps) {
+export default function SalesKOTPanel({ orders, onOpenInvoice, onDeleteOrder }: SalesKOTPanelProps) {
   // Time filter: 'today' | 'yesterday' | '7days' | 'month' | 'all'
   const [timeFilter, setTimeFilter] = useState<'today' | 'yesterday' | '7days' | 'month' | 'all'>('today');
   
@@ -691,6 +693,16 @@ export default function SalesKOTPanel({ orders, onOpenInvoice }: SalesKOTPanelPr
                           <Printer className="w-3 h-3" />
                           <span>Tax Invoice</span>
                         </button>
+                        {onDeleteOrder && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteOrder(ord.id)}
+                            className="inline-flex items-center p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 transition-all cursor-pointer"
+                            title="Delete this transaction record"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

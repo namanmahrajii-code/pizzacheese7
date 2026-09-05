@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
-import { addGlobalOrder, getGlobalOrders, OrderData } from '@/lib/orderStore';
+import { addGlobalOrder, getGlobalOrders, deleteGlobalOrder, clearGlobalOrders, OrderData } from '@/lib/orderStore';
 
 export async function GET() {
   return NextResponse.json({
@@ -102,3 +102,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to place order' }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    const clearAll = searchParams.get('all') === 'true';
+
+    if (clearAll) {
+      clearGlobalOrders();
+      return NextResponse.json({ success: true, message: 'All orders cleared' });
+    }
+
+    if (!id) {
+      return NextResponse.json({ error: 'Order ID is required' }, { status: 400 });
+    }
+
+    const deleted = deleteGlobalOrder(id);
+    if (!deleted) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, message: `Order ${id} deleted` });
+  } catch (error: any) {
+    console.error('Order deletion error:', error);
+    return NextResponse.json({ error: 'Failed to delete order' }, { status: 500 });
+  }
+}
+

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
-import { getOrderById, updateGlobalOrder } from '@/lib/orderStore';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { getOrderById, updateGlobalOrder, deleteGlobalOrder } from '@/lib/orderStore';
 
 export async function GET(
   req: Request,
@@ -57,3 +57,23 @@ export async function PATCH(
     );
   }
 }
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    deleteGlobalOrder(id);
+    try {
+      if (db) {
+        deleteDoc(doc(db, 'orders', id)).catch(() => {});
+      }
+    } catch (e) {}
+
+    return NextResponse.json({ success: true, id, message: 'Order deleted' });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Failed to delete order' }, { status: 500 });
+  }
+}
+
